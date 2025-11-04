@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, Loader2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase-temp";
 
 const SosButton = () => {
   const [isActivating, setIsActivating] = useState(false);
@@ -19,8 +19,9 @@ const SosButton = () => {
             const locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
             
             // Fetch emergency contacts
+            // @ts-ignore - Database types will regenerate after migration deploys
             const { data: contacts, error } = await supabase
-              .from('emergency_contacts' as any)
+              .from('emergency_contacts')
               .select('*')
               .order('is_primary', { ascending: false });
 

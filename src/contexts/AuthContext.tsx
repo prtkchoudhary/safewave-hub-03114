@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase-temp';
 import { useNavigate } from 'react-router-dom';
 
 type AuthContextType = {
@@ -56,8 +56,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const checkAdminStatus = async (userId: string) => {
+    // @ts-ignore - Database types will regenerate after migration deploys
     const { data } = await supabase
-      .from('user_roles' as any)
+      .from('user_roles')
       .select('role')
       .eq('user_id', userId)
       .eq('role', 'admin')

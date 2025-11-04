@@ -3,7 +3,7 @@ import { Shield, Users, Crown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase-temp";
 
 type UserWithRole = {
   id: string;
@@ -20,15 +20,17 @@ const AdminPanel = () => {
   }, []);
 
   const fetchUsers = async () => {
+    // @ts-ignore - Database types will regenerate after migration deploys
     const { data: profiles } = await supabase
-      .from('profiles' as any)
+      .from('profiles')
       .select('id, email');
 
     if (profiles) {
       const usersWithRoles = await Promise.all(
         profiles.map(async (profile: any) => {
+          // @ts-ignore - Database types will regenerate after migration deploys
           const { data: roleData } = await supabase
-            .from('user_roles' as any)
+            .from('user_roles')
             .select('role')
             .eq('user_id', profile.id)
             .eq('role', 'admin')
@@ -50,8 +52,9 @@ const AdminPanel = () => {
     try {
       if (currentRole === 'admin') {
         // Remove admin role
+        // @ts-ignore - Database types will regenerate after migration deploys
         const { error } = await supabase
-          .from('user_roles' as any)
+          .from('user_roles')
           .delete()
           .eq('user_id', userId)
           .eq('role', 'admin');
@@ -64,8 +67,9 @@ const AdminPanel = () => {
         });
       } else {
         // Add admin role
+        // @ts-ignore - Database types will regenerate after migration deploys
         const { error } = await supabase
-          .from('user_roles' as any)
+          .from('user_roles')
           .insert([{ user_id: userId, role: 'admin' }]);
 
         if (error) throw error;

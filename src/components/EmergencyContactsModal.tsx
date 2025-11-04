@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase-temp";
 import { z } from 'zod';
 
 type EmergencyContactsModalProps = {
@@ -40,8 +40,9 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
   }, [isOpen]);
 
   const fetchContacts = async () => {
+      // @ts-ignore - Database types will regenerate after migration deploys
       const { data, error } = await supabase
-        .from('emergency_contacts' as any)
+        .from('emergency_contacts')
         .select('*')
         .order('is_primary', { ascending: false });
 
@@ -63,8 +64,9 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // @ts-ignore - Database types will regenerate after migration deploys
       const { error } = await supabase
-        .from('emergency_contacts' as any)
+        .from('emergency_contacts')
         .insert([{
           user_id: user.id,
           name: newContact.name,
@@ -101,8 +103,9 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
   };
 
   const handleDelete = async (id: string) => {
+    // @ts-ignore - Database types will regenerate after migration deploys
     const { error } = await supabase
-      .from('emergency_contacts' as any)
+      .from('emergency_contacts')
       .delete()
       .eq('id', id);
 
