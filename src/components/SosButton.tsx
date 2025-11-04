@@ -20,25 +20,36 @@ const SosButton = () => {
             
             // Fetch emergency contacts
             const { data: contacts, error } = await supabase
-              .from('emergency_contacts')
+              .from('emergency_contacts' as any)
               .select('*')
               .order('is_primary', { ascending: false });
 
             if (error) {
               console.error('Error fetching contacts:', error);
+              toast({
+                title: "Error",
+                description: "Failed to fetch emergency contacts.",
+                variant: "destructive",
+              });
+              setIsActivating(false);
+              return;
             }
 
             if (contacts && contacts.length > 0) {
-              // In a real app, this would trigger SMS sending via edge function
-              toast({
-                title: "SOS Alert Activated!",
-                description: `Emergency alert sent to ${contacts.length} contact(s) with your location.`,
+              // Create emergency message
+              const message = `🚨 EMERGENCY SOS ALERT 🚨\n\nI need help! My current location:\n${locationUrl}\n\nCoordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}\n\nTime: ${new Date().toLocaleString()}`;
+              
+              // Open SMS app for each contact
+              contacts.forEach((contact: any, index: number) => {
+                setTimeout(() => {
+                  const smsUrl = `sms:${contact.phone}?body=${encodeURIComponent(message)}`;
+                  window.open(smsUrl, '_blank');
+                }, index * 500); // Stagger opening to avoid overwhelming the system
               });
 
-              console.log('SOS Details:', {
-                location: locationUrl,
-                contacts: contacts.map(c => ({ name: c.name, phone: c.phone })),
-                timestamp: new Date().toISOString(),
+              toast({
+                title: "SOS Alert Activated!",
+                description: `Opening SMS app for ${contacts.length} contact(s). Please send the messages.`,
               });
             } else {
               toast({

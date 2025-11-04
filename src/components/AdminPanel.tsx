@@ -21,14 +21,14 @@ const AdminPanel = () => {
 
   const fetchUsers = async () => {
     const { data: profiles } = await supabase
-      .from('profiles')
+      .from('profiles' as any)
       .select('id, email');
 
     if (profiles) {
       const usersWithRoles = await Promise.all(
-        profiles.map(async (profile) => {
+        profiles.map(async (profile: any) => {
           const { data: roleData } = await supabase
-            .from('user_roles')
+            .from('user_roles' as any)
             .select('role')
             .eq('user_id', profile.id)
             .eq('role', 'admin')
@@ -51,7 +51,7 @@ const AdminPanel = () => {
       if (currentRole === 'admin') {
         // Remove admin role
         const { error } = await supabase
-          .from('user_roles')
+          .from('user_roles' as any)
           .delete()
           .eq('user_id', userId)
           .eq('role', 'admin');
@@ -65,7 +65,7 @@ const AdminPanel = () => {
       } else {
         // Add admin role
         const { error } = await supabase
-          .from('user_roles')
+          .from('user_roles' as any)
           .insert([{ user_id: userId, role: 'admin' }]);
 
         if (error) throw error;

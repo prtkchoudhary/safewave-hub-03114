@@ -40,10 +40,10 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
   }, [isOpen]);
 
   const fetchContacts = async () => {
-    const { data, error } = await supabase
-      .from('emergency_contacts')
-      .select('*')
-      .order('is_primary', { ascending: false });
+      const { data, error } = await supabase
+        .from('emergency_contacts' as any)
+        .select('*')
+        .order('is_primary', { ascending: false });
 
     if (error) {
       toast({
@@ -64,7 +64,7 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
       if (!user) throw new Error('Not authenticated');
 
       const { error } = await supabase
-        .from('emergency_contacts')
+        .from('emergency_contacts' as any)
         .insert([{
           user_id: user.id,
           name: newContact.name,
@@ -102,7 +102,7 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase
-      .from('emergency_contacts')
+      .from('emergency_contacts' as any)
       .delete()
       .eq('id', id);
 
