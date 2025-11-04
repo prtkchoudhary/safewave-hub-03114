@@ -7,10 +7,18 @@ type QuickActionsProps = {
 
 const QuickActions = ({ onContactsClick }: QuickActionsProps) => {
   const openEmergencyHelplines = () => {
-    const helplines = `Emergency Services:\n\nPolice: 100\nWomen Helpline: 1091\nChild Helpline: 1098\nAmbulance: 102`;
+    const helplines = [
+      { name: "Police", number: "100" },
+      { name: "Women Helpline", number: "1091" },
+      { name: "Child Helpline", number: "1098" },
+      { name: "Ambulance", number: "102" }
+    ];
     
-    if (confirm(helplines + "\n\nDial Police (100)?")) {
-      window.location.href = "tel:100";
+    const message = helplines.map(h => `${h.name}: ${h.number}`).join('\n');
+    const choice = prompt(message + "\n\nEnter the number to dial (100, 1091, 1098, 102):");
+    
+    if (choice && helplines.some(h => h.number === choice)) {
+      window.location.href = `tel:${choice}`;
     }
   };
 
