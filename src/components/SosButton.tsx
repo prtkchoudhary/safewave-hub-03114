@@ -3,9 +3,19 @@ import { AlertTriangle, Loader2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase-temp";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const SosButton = () => {
   const [isActivating, setIsActivating] = useState(false);
+  const [showContactsDialog, setShowContactsDialog] = useState(false);
+  const [emergencyContacts, setEmergencyContacts] = useState<any[]>([]);
+  const [locationData, setLocationData] = useState<{latitude: number, longitude: number, locationUrl: string, message: string} | null>(null);
   const { toast } = useToast();
 
   const handleSOS = async () => {
@@ -40,19 +50,14 @@ const SosButton = () => {
               // Create emergency message
               const message = `🚨 EMERGENCY SOS ALERT 🚨\n\nI need help! My current location:\n${locationUrl}\n\nCoordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}\n\nTime: ${new Date().toLocaleString()}`;
               
-              // Open WhatsApp for each contact
-              contacts.forEach((contact: any, index: number) => {
-                setTimeout(() => {
-                  // Clean phone number (remove spaces, dashes, etc.)
-                  const cleanPhone = contact.phone.replace(/[^\d+]/g, '');
-                  const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-                  window.open(whatsappUrl, '_blank');
-                }, index * 1500); // Stagger by 1.5 seconds to allow time to send each message
-              });
-
+              // Store data and show dialog with contacts
+              setEmergencyContacts(contacts);
+              setLocationData({ latitude, longitude, locationUrl, message });
+              setShowContactsDialog(true);
+              
               toast({
-                title: "SOS Alert Activated!",
-                description: `Opening WhatsApp for ${contacts.length} contact(s). Send each message to alert them.`,
+                title: "SOS Alert Ready!",
+                description: `Tap each contact to send alert via WhatsApp.`,
               });
             } else {
               toast({
@@ -91,8 +96,44 @@ const SosButton = () => {
     }
   };
 
+  const sendWhatsApp = (contact: any) => {
+    if (locationData) {
+      const cleanPhone = contact.phone.replace(/[^\d+]/g, '');
+      const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(locationData.message)}`;
+      window.open(whatsappUrl, '_blank');
+    }
+  };
+
   return (
-    <div className="relative inline-block">
+    <>
+      <Dialog open={showContactsDialog} onOpenChange={setShowContactsDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-accent">🚨 Send SOS Alert</DialogTitle>
+            <DialogDescription>
+              Tap each contact to send emergency alert via WhatsApp
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {emergencyContacts.map((contact: any) => (
+              <Button
+                key={contact.id}
+                onClick={() => sendWhatsApp(contact)}
+                className="w-full justify-start text-left h-auto py-3"
+                variant="outline"
+              >
+                <div className="flex flex-col items-start">
+                  <div className="font-semibold">{contact.name}</div>
+                  <div className="text-sm text-muted-foreground">{contact.phone}</div>
+                  <div className="text-xs text-muted-foreground">{contact.relationship}</div>
+                </div>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <div className="relative inline-block">
       <div className="absolute -inset-4 bg-accent rounded-full blur-2xl opacity-60 animate-pulse"></div>
       <Button
         onClick={handleSOS}
@@ -115,7 +156,8 @@ const SosButton = () => {
           )}
         </div>
       </Button>
-    </div>
+      </div>
+    </>
   );
 };
 

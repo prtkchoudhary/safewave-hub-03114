@@ -6,12 +6,38 @@ type QuickActionsProps = {
 };
 
 const QuickActions = ({ onContactsClick }: QuickActionsProps) => {
+  const openEmergencyHelplines = () => {
+    const helplines = `Emergency Services:\n\nPolice: 100\nWomen Helpline: 1091\nChild Helpline: 1098\nAmbulance: 102`;
+    
+    if (confirm(helplines + "\n\nDial Police (100)?")) {
+      window.location.href = "tel:100";
+    }
+  };
+
+  const openSafeZones = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const searchQuery = `(police+station+OR+hospital)+near+${latitude},${longitude}`;
+          window.open(`https://www.google.com/maps/search/${searchQuery}`, '_blank');
+        },
+        () => {
+          // Fallback if location not available
+          window.open('https://www.google.com/maps/search/police+station+OR+hospital', '_blank');
+        }
+      );
+    } else {
+      window.open('https://www.google.com/maps/search/police+station+OR+hospital', '_blank');
+    }
+  };
+
   const actions = [
     {
       icon: Phone,
       label: "Emergency Helplines",
-      subtitle: "100 • 1091",
-      onClick: () => window.location.href = "tel:100",
+      subtitle: "100 • 1091 • 1098",
+      onClick: openEmergencyHelplines,
       color: "from-accent/20 to-accent/10",
     },
     {
@@ -25,15 +51,8 @@ const QuickActions = ({ onContactsClick }: QuickActionsProps) => {
       icon: MapPin,
       label: "Find Safe Zones",
       subtitle: "Police • Hospital",
-      onClick: () => {},
+      onClick: openSafeZones,
       color: "from-primary/20 to-primary/10",
-    },
-    {
-      icon: AlertCircle,
-      label: "Safety Tips",
-      subtitle: "Stay informed",
-      onClick: () => {},
-      color: "from-muted/40 to-muted/20",
     },
   ];
 
