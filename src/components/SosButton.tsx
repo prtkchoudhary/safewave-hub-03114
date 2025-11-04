@@ -40,17 +40,19 @@ const SosButton = () => {
               // Create emergency message
               const message = `🚨 EMERGENCY SOS ALERT 🚨\n\nI need help! My current location:\n${locationUrl}\n\nCoordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}\n\nTime: ${new Date().toLocaleString()}`;
               
-              // Open SMS app for each contact
+              // Open WhatsApp for each contact
               contacts.forEach((contact: any, index: number) => {
                 setTimeout(() => {
-                  const smsUrl = `sms:${contact.phone}?body=${encodeURIComponent(message)}`;
-                  window.open(smsUrl, '_blank');
-                }, index * 500); // Stagger opening to avoid overwhelming the system
+                  // Clean phone number (remove spaces, dashes, etc.)
+                  const cleanPhone = contact.phone.replace(/[^\d+]/g, '');
+                  const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+                  window.open(whatsappUrl, '_blank');
+                }, index * 1500); // Stagger by 1.5 seconds to allow time to send each message
               });
 
               toast({
                 title: "SOS Alert Activated!",
-                description: `Opening SMS app for ${contacts.length} contact(s). Please send the messages.`,
+                description: `Opening WhatsApp for ${contacts.length} contact(s). Send each message to alert them.`,
               });
             } else {
               toast({
