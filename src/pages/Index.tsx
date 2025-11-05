@@ -7,6 +7,7 @@ import ChatOverlay from "@/components/ChatOverlay";
 import EmergencyContactsModal from "@/components/EmergencyContactsModal";
 import QuickActions from "@/components/QuickActions";
 import AdminPanel from "@/components/AdminPanel";
+import BottomNav from "@/components/BottomNav";
 import { Button } from '@/components/ui/button';
 
 const Index = () => {
@@ -33,7 +34,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary relative overflow-hidden pb-20">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-30 bg-card/80 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
@@ -111,6 +112,9 @@ const Index = () => {
         isOpen={showContacts} 
         onClose={() => setShowContacts(false)} 
       />
+
+      {/* Bottom Navigation */}
+      <BottomNav />
     </div>
   );
 };
