@@ -1,12 +1,12 @@
-import { Home, Shield, FileText, Clock } from "lucide-react";
+import { Home, Shield, FileText, MapPin, Phone } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const BottomNav = () => {
   const navItems = [
     { icon: Home, label: "Home", path: "/" },
-    { icon: Clock, label: "Timer", path: "/safety-timer" },
+    { icon: MapPin, label: "Location", path: "/live-location" },
     { icon: FileText, label: "Report", path: "/incident-report" },
-    { icon: Shield, label: "SOS", path: "/" },
+    { icon: Phone, label: "Call", path: "/fake-call" },
   ];
 
   return (

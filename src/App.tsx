@@ -9,6 +9,8 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import SafetyTimer from "./pages/SafetyTimer";
 import IncidentReport from "./pages/IncidentReport";
+import LiveLocation from "./pages/LiveLocation";
+import FakeCall from "./pages/FakeCall";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +26,8 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/safety-timer" element={<SafetyTimer />} />
             <Route path="/incident-report" element={<IncidentReport />} />
+            <Route path="/live-location" element={<LiveLocation />} />
+            <Route path="/fake-call" element={<FakeCall />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
