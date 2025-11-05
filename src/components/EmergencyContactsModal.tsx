@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Trash2, Phone, User as UserIcon } from "lucide-react";
+import { X, Plus, Trash2, Phone, User as UserIcon, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +30,7 @@ const contactSchema = z.object({
 const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState({ name: "", phone: "", relationship: "" });
   const { toast } = useToast();
 
@@ -102,6 +103,58 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
     }
   };
 
+  const handleEdit = (contact: Contact) => {
+    setEditingId(contact.id);
+    setNewContact({
+      name: contact.name,
+      phone: contact.phone,
+      relationship: contact.relationship || "",
+    });
+    setIsAdding(true);
+  };
+
+  const handleUpdate = async () => {
+    try {
+      contactSchema.parse(newContact);
+
+      // @ts-ignore - Database types will regenerate after migration deploys
+      const { error } = await supabase
+        .from('emergency_contacts')
+        .update({
+          name: newContact.name,
+          phone: newContact.phone,
+          relationship: newContact.relationship || null,
+        })
+        .eq('id', editingId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Contact Updated",
+        description: `${newContact.name} has been updated.`,
+      });
+
+      setNewContact({ name: "", phone: "", relationship: "" });
+      setIsAdding(false);
+      setEditingId(null);
+      fetchContacts();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to update contact",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const handleDelete = async (id: string) => {
     // @ts-ignore - Database types will regenerate after migration deploys
     const { error } = await supabase
@@ -122,6 +175,12 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
       });
       fetchContacts();
     }
+  };
+
+  const handleCancel = () => {
+    setIsAdding(false);
+    setEditingId(null);
+    setNewContact({ name: "", phone: "", relationship: "" });
   };
 
   if (!isOpen) return null;
@@ -156,14 +215,24 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
                   )}
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleDelete(contact.id)}
-                className="text-destructive"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleEdit(contact)}
+                  className="text-primary"
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDelete(contact.id)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </Card>
         ))}
@@ -198,10 +267,13 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
               />
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleAdd} className="flex-1 bg-primary text-primary-foreground">
-                Save Contact
+              <Button 
+                onClick={editingId ? handleUpdate : handleAdd} 
+                className="flex-1 bg-primary text-primary-foreground"
+              >
+                {editingId ? "Update Contact" : "Save Contact"}
               </Button>
-              <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">
+              <Button onClick={handleCancel} variant="outline" className="flex-1">
                 Cancel
               </Button>
             </div>

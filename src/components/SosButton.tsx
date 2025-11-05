@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Loader2, MapPin } from "lucide-react";
+import { AlertTriangle, Loader2, MapPin, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase-temp";
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
 
 const SosButton = () => {
   const [isActivating, setIsActivating] = useState(false);
@@ -57,7 +58,7 @@ const SosButton = () => {
               
               toast({
                 title: "SOS Alert Ready!",
-                description: `Tap each contact to send alert via WhatsApp.`,
+                description: `Choose WhatsApp or SMS to send alerts.`,
               });
             } else {
               toast({
@@ -104,6 +105,14 @@ const SosButton = () => {
     }
   };
 
+  const sendSMS = (contact: any) => {
+    if (locationData) {
+      const cleanPhone = contact.phone.replace(/[^\d+]/g, '');
+      const smsUrl = `sms:${cleanPhone}?body=${encodeURIComponent(locationData.message)}`;
+      window.location.href = smsUrl;
+    }
+  };
+
   return (
     <>
       <Dialog open={showContactsDialog} onOpenChange={setShowContactsDialog}>
@@ -111,23 +120,40 @@ const SosButton = () => {
           <DialogHeader>
             <DialogTitle className="text-accent">🚨 Send SOS Alert</DialogTitle>
             <DialogDescription>
-              Tap each contact to send emergency alert via WhatsApp
+              Choose how to send emergency alert to each contact
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
             {emergencyContacts.map((contact: any) => (
-              <Button
-                key={contact.id}
-                onClick={() => sendWhatsApp(contact)}
-                className="w-full justify-start text-left h-auto py-3"
-                variant="outline"
-              >
-                <div className="flex flex-col items-start">
-                  <div className="font-semibold">{contact.name}</div>
-                  <div className="text-sm text-muted-foreground">{contact.phone}</div>
-                  <div className="text-xs text-muted-foreground">{contact.relationship}</div>
+              <Card key={contact.id} className="p-4 bg-card border-border">
+                <div className="space-y-3">
+                  <div>
+                    <div className="font-semibold text-foreground">{contact.name}</div>
+                    <div className="text-sm text-muted-foreground">{contact.phone}</div>
+                    {contact.relationship && (
+                      <div className="text-xs text-muted-foreground">{contact.relationship}</div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => sendWhatsApp(contact)}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      size="sm"
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      WhatsApp
+                    </Button>
+                    <Button
+                      onClick={() => sendSMS(contact)}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                      size="sm"
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      SMS
+                    </Button>
+                  </div>
                 </div>
-              </Button>
+              </Card>
             ))}
           </div>
         </DialogContent>

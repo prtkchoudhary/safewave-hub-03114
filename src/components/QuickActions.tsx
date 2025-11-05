@@ -35,16 +35,23 @@ const QuickActions = ({ onContactsClick }: QuickActionsProps) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          const searchQuery = `(police+station+OR+hospital)+near+${latitude},${longitude}`;
-          window.open(`https://www.google.com/maps/search/${searchQuery}`, '_blank');
+          // Search for police stations, hospitals, and fire stations within 5km radius
+          const searchQuery = `police+station+hospital+fire+station+near+me`;
+          const mapsUrl = `https://www.google.com/maps/search/${searchQuery}/@${latitude},${longitude},14z`;
+          window.open(mapsUrl, '_blank');
         },
-        () => {
-          // Fallback if location not available
-          window.open('https://www.google.com/maps/search/police+station+OR+hospital', '_blank');
+        (error) => {
+          // Fallback - open generic search
+          window.open('https://www.google.com/maps/search/police+station+hospital+near+me', '_blank');
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
         }
       );
     } else {
-      window.open('https://www.google.com/maps/search/police+station+OR+hospital', '_blank');
+      window.open('https://www.google.com/maps/search/police+station+hospital+near+me', '_blank');
     }
   };
 
