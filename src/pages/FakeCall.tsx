@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, PhoneOff, Shield, User, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,14 @@ const FakeCall = () => {
   const [callerName, setCallerName] = useState("Mom");
   const [delay, setDelay] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
+  const vibrationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const triggerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isCallActiveRef = useRef(false);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    isCallActiveRef.current = isCallActive;
+  }, [isCallActive]);
 
   useEffect(() => {
     if (!user) {
@@ -33,38 +41,61 @@ const FakeCall = () => {
     return () => clearInterval(interval);
   }, [isCallActive]);
 
+  // Cleanup vibration and timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (vibrationTimeoutRef.current) {
+        clearTimeout(vibrationTimeoutRef.current);
+      }
+      if (triggerTimeoutRef.current) {
+        clearTimeout(triggerTimeoutRef.current);
+      }
+      if (navigator.vibrate) {
+        navigator.vibrate(0);
+      }
+    };
+  }, []);
+
+  const stopVibration = () => {
+    if (vibrationTimeoutRef.current) {
+      clearTimeout(vibrationTimeoutRef.current);
+      vibrationTimeoutRef.current = null;
+    }
+    if (navigator.vibrate) {
+      navigator.vibrate(0);
+    }
+  };
+
+  const startVibration = () => {
+    if (!navigator.vibrate) return;
+
+    const pattern = [200, 100, 200, 100, 200];
+    const vibrate = () => {
+      if (!isCallActiveRef.current) return;
+
+      navigator.vibrate(pattern);
+      vibrationTimeoutRef.current = setTimeout(vibrate, 1000);
+    };
+    vibrate();
+  };
+
   const triggerCall = () => {
     const triggerDelay = delay * 1000;
-    
-    setTimeout(() => {
+
+    triggerTimeoutRef.current = setTimeout(() => {
       setIsCallActive(true);
       setCallDuration(0);
-      
-      // Vibrate if supported
-      if (navigator.vibrate) {
-        const pattern = [200, 100, 200, 100, 200];
-        const vibrate = () => {
-          navigator.vibrate(pattern);
-          if (isCallActive) {
-            setTimeout(vibrate, 1000);
-          }
-        };
-        vibrate();
-      }
+      startVibration();
     }, triggerDelay);
   };
 
   const answerCall = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate(0);
-    }
+    stopVibration();
     // Keep call active but stop ringing effect
   };
 
   const endCall = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate(0);
-    }
+    stopVibration();
     setIsCallActive(false);
     setCallDuration(0);
   };
@@ -141,7 +172,7 @@ const FakeCall = () => {
         </div>
       </header>
 
-      <main className="pt-20 px-4">
+      <main className="pt-20 px-4 md:pt-32 lg:pt-20 lg:pl-60">
         <div className="max-w-md mx-auto space-y-6">
           <Card className="border-2">
             <CardHeader>

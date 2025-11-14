@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Shield, Play, Square, Share2, Clock } from "lucide-react";
+import { MapPin, Shield, Play, Square, Share2, Clock, Copy, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,14 +18,35 @@ const LiveLocation = () => {
   const [duration, setDuration] = useState(30);
   const [timeLeft, setTimeLeft] = useState(0);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const shareIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const currentLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const shareIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentLocationRef.current = currentLocation;
+  }, [currentLocation]);
 
   useEffect(() => {
     if (!user) {
       navigate('/auth');
     }
   }, [user, navigate]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (shareIntervalRef.current) {
+        clearInterval(shareIntervalRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -39,25 +60,92 @@ const LiveLocation = () => {
     return () => clearInterval(interval);
   }, [isSharing, timeLeft]);
 
-  const shareLocation = async (lat: number, lng: number) => {
-    const { data: contacts } = await supabase
-      .from('emergency_contacts')
-      .select('*')
-      .eq('user_id', user?.id);
+  const shareLocation = async (lat: number, lng: number, accuracy?: number) => {
+    try {
+      // If this is the first share, create a new record; otherwise update existing
+      if (!shareIdRef.current) {
+        const { data, error: dbError } = await supabase
+          .from('location_shares')
+          .insert({
+            user_id: user?.id,
+            latitude: lat,
+            longitude: lng,
+            accuracy: accuracy || 10,
+            expires_at: new Date(Date.now() + duration * 60 * 1000).toISOString(),
+            is_active: true
+          })
+          .select('id, share_token')
+          .single();
 
-    if (contacts && contacts.length > 0) {
-      const primaryContact = contacts.find(c => c.is_primary) || contacts[0];
-      const mapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
-      const message = encodeURIComponent(
-        `📍 LIVE LOCATION UPDATE\n\nI'm sharing my location with you.\n\nCurrent Location:\n${mapsLink}\n\nLat: ${lat.toFixed(6)}\nLng: ${lng.toFixed(6)}\n\nTime: ${new Date().toLocaleString()}`
-      );
-      
-      // Open WhatsApp in new tab
-      window.open(`https://wa.me/${primaryContact.phone}?text=${message}`, '_blank');
+        if (dbError) {
+          console.error('Error saving location:', dbError);
+          return;
+        }
+
+        if (data) {
+          shareIdRef.current = data.id;
+          setShareToken(data.share_token);
+          const url = `${window.location.origin}/track/${data.share_token}`;
+          setShareUrl(url);
+        }
+      } else {
+        // Update existing location
+        const { error: updateError } = await supabase
+          .from('location_shares')
+          .update({
+            latitude: lat,
+            longitude: lng,
+            accuracy: accuracy || 10,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', shareIdRef.current);
+
+        if (updateError) {
+          console.error('Error updating location:', updateError);
+        }
+      }
+
+      // Send Twilio SMS via edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const response = await supabase.functions.invoke('emergency-notifications', {
+          body: {
+            type: 'sos', // We can reuse SOS type for location sharing
+            user_id: session.user.id,
+            location: {
+              latitude: lat,
+              longitude: lng
+            },
+            message: "Live location update - I'm sharing my location with you"
+          }
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message);
+        }
+
+        console.log('Location SMS sent successfully');
+      }
+    } catch (error) {
+      console.error('Error sharing location:', error);
+      toast({
+        title: "Warning",
+        description: "Could not send automatic SMS. Location is still being tracked.",
+        variant: "destructive",
+      });
     }
   };
 
   const startSharing = () => {
+    if (duration < 5 || duration > 240) {
+      toast({
+        title: "Invalid Duration",
+        description: "Please enter a duration between 5-240 minutes",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!navigator.geolocation) {
       toast({
         title: "Error",
@@ -70,66 +158,96 @@ const LiveLocation = () => {
     setIsSharing(true);
     setTimeLeft(duration * 60);
 
-    // Get initial location and share it
+    // Get initial location with high accuracy
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         setCurrentLocation({ lat: latitude, lng: longitude });
-        shareLocation(latitude, longitude);
+        shareLocation(latitude, longitude, accuracy).catch(err => {
+          console.error("Error sharing location:", err);
+        });
       },
       (error) => {
         console.error("Error getting location:", error);
         toast({
           title: "Location Error",
-          description: "Could not get your current location",
+          description: "Could not get your current location. Make sure location services are enabled.",
           variant: "destructive",
         });
+        setIsSharing(false);
+      },
+      {
+        timeout: 15000,
+        enableHighAccuracy: true,
+        maximumAge: 0
       }
     );
 
-    // Watch position and update every minute
+    // Watch position with high accuracy for continuous updates
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         setCurrentLocation({ lat: latitude, lng: longitude });
+
+        // Only update if accuracy is good (< 50 meters)
+        if (accuracy < 50) {
+          shareLocation(latitude, longitude, accuracy).catch(err => {
+            console.error("Error updating location:", err);
+          });
+        }
       },
       (error) => {
         console.error("Error watching location:", error);
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 10000,
-        timeout: 5000,
+        maximumAge: 5000, // Accept cached position up to 5 seconds old
+        timeout: 10000,
       }
     );
 
-    // Share location every 2 minutes
-    shareIntervalRef.current = setInterval(() => {
-      if (currentLocation) {
-        shareLocation(currentLocation.lat, currentLocation.lng);
-      }
-    }, 120000); // 2 minutes
-
     toast({
       title: "Location Sharing Started",
-      description: `Sharing location for ${duration} minutes`,
+      description: `Sharing location for ${duration} minutes. Share link will appear shortly.`,
     });
   };
 
-  const stopSharing = () => {
+  const stopSharing = async () => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    
+
     if (shareIntervalRef.current) {
       clearInterval(shareIntervalRef.current);
       shareIntervalRef.current = null;
     }
 
+    // Update location shares to inactive in database
+    try {
+      if (shareIdRef.current) {
+        const { error } = await supabase
+          .from('location_shares')
+          .update({
+            is_active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', shareIdRef.current);
+
+        if (error) {
+          console.error('Error updating location shares:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Database error:', error);
+    }
+
     setIsSharing(false);
     setTimeLeft(0);
-    
+    setShareToken(null);
+    setShareUrl(null);
+    shareIdRef.current = null;
+
     toast({
       title: "Sharing Stopped",
       description: "Location sharing has ended",
@@ -159,7 +277,7 @@ const LiveLocation = () => {
         </div>
       </header>
 
-      <main className="pt-20 px-4">
+      <main className="pt-20 px-4 md:pt-32 lg:pt-20 lg:pl-60">
         <div className="max-w-md mx-auto space-y-6">
           <Card className="border-2">
             <CardHeader>
@@ -182,9 +300,23 @@ const LiveLocation = () => {
                       min="5"
                       max="240"
                       value={duration}
-                      onChange={(e) => setDuration(parseInt(e.target.value) || 30)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          setDuration(0);
+                        } else {
+                          const numValue = parseInt(value);
+                          if (!isNaN(numValue) && numValue >= 5 && numValue <= 240) {
+                            setDuration(numValue);
+                          }
+                        }
+                      }}
+                      placeholder="30"
                       className="mt-1"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter duration between 5-240 minutes
+                    </p>
                   </div>
                   <Button 
                     onClick={startSharing} 
@@ -214,18 +346,88 @@ const LiveLocation = () => {
                       </div>
                     )}
                   </div>
-                  
+
+                  {/* Share Link Section */}
+                  {shareUrl && (
+                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-3">
+                      <div>
+                        <Label className="text-sm font-semibold mb-2 block">Shareable Link</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={shareUrl}
+                            readOnly
+                            className="font-mono text-xs bg-background"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(shareUrl);
+                              toast({
+                                title: "Copied!",
+                                description: "Link copied to clipboard",
+                              });
+                            }}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-green-600 hover:bg-green-700 text-white border-green-600"
+                          onClick={() => {
+                            const message = encodeURIComponent(
+                              `🔴 Live Location Sharing Active\n\nI'm sharing my live location with you for safety purposes.\n\nTrack me here: ${shareUrl}\n\nUpdates automatically every 2 minutes.`
+                            );
+                            window.open(`https://wa.me/?text=${message}`, '_blank');
+                          }}
+                        >
+                          <MessageSquare className="w-4 h-4 mr-1" />
+                          WhatsApp
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const message = encodeURIComponent(
+                              `🔴 Live Location: ${shareUrl}`
+                            );
+                            window.location.href = `sms:?body=${message}`;
+                          }}
+                        >
+                          <Share2 className="w-4 h-4 mr-1" />
+                          SMS
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Recipients can track your location in real-time without logging in
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3">
-                    <Button 
-                      onClick={() => currentLocation && shareLocation(currentLocation.lat, currentLocation.lng)}
+                    <Button
+                      onClick={() => {
+                        if (shareUrl) {
+                          navigator.clipboard.writeText(shareUrl);
+                          toast({
+                            title: "Link Copied!",
+                            description: "Share link copied to clipboard",
+                          });
+                        }
+                      }}
                       variant="outline"
                       size="lg"
                       className="w-full"
+                      disabled={!shareUrl}
                     >
                       <Share2 className="w-5 h-5 mr-2" />
-                      Share Now
+                      Copy Link
                     </Button>
-                    <Button 
+                    <Button
                       onClick={stopSharing}
                       variant="destructive"
                       size="lg"

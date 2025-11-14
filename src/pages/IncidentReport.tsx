@@ -21,6 +21,8 @@ const IncidentReport = () => {
   const [incidentType, setIncidentType] = useState("");
   const [description, setDescription] = useState("");
   const [datetime, setDatetime] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -45,51 +47,130 @@ const IncidentReport = () => {
     setDatetime(formattedDate);
   }, [user, navigate]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const fileArray = Array.from(files);
+      const validFiles = fileArray.filter(file => {
+        const isValidType = file.type.startsWith('image/');
+        const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB limit
+        return isValidType && isValidSize;
+      });
+
+      if (validFiles.length !== fileArray.length) {
+        toast({
+          title: "Some files were skipped",
+          description: "Only image files under 5MB are allowed",
+          variant: "destructive",
+        });
+      }
+
+      setImages(prev => [...prev, ...validFiles].slice(0, 3)); // Max 3 images
+
+      // Create preview URLs
+      validFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            setImagePreviewUrls(prev => [...prev, e.target!.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // Here you would typically save to a database
-      // For now, we'll create a report message
-      const report = `
-🚨 INCIDENT REPORT
-
-Type: ${incidentType}
-Date/Time: ${new Date(datetime).toLocaleString()}
-Location: ${location}
-
-Description:
-${description}
-
-Reported by: ${user?.email}
-      `;
-
-      // Send to emergency contacts
-      const { data: contacts } = await supabase
-        .from('emergency_contacts')
-        .select('*')
-        .eq('user_id', user?.id);
-
-      if (contacts && contacts.length > 0) {
-        const primaryContact = contacts.find(c => c.is_primary) || contacts[0];
-        const message = encodeURIComponent(report);
-        window.open(`https://wa.me/${primaryContact.phone}?text=${message}`, '_blank');
+      // Parse location coordinates if available
+      let latitude = null;
+      let longitude = null;
+      if (location.includes(',')) {
+        const [lat, lng] = location.split(',').map(coord => parseFloat(coord.trim()));
+        if (!isNaN(lat) && !isNaN(lng)) {
+          latitude = lat;
+          longitude = lng;
+        }
       }
 
-      toast({
-        title: "Report Submitted",
-        description: "Your incident report has been sent to emergency contacts",
-      });
+      // Save incident to database
+      const { data: incident, error: dbError } = await supabase
+        .from('incidents')
+        .insert({
+          user_id: user?.id,
+          title: `${incidentType} incident`,
+          description: description,
+          incident_type: incidentType,
+          location: location,
+          latitude: latitude,
+          longitude: longitude,
+          status: 'open',
+          severity: 'medium'
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Error saving incident:', dbError);
+        throw new Error('Failed to save incident to database');
+      }
+
+      // Send Twilio SMS via edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const response = await supabase.functions.invoke('emergency-notifications', {
+          body: {
+            type: 'incident_report',
+            user_id: session.user.id,
+            location: latitude && longitude ? {
+              latitude: latitude,
+              longitude: longitude
+            } : undefined,
+            incident_details: {
+              title: `${incidentType} incident`,
+              description: description,
+              incident_type: incidentType,
+              has_images: images.length > 0,
+              image_count: images.length
+            }
+          }
+        });
+
+        if (response.error) {
+          console.error('SMS error:', response.error);
+          throw new Error('Failed to send SMS alerts');
+        }
+
+        toast({
+          title: "✅ Report Submitted",
+          description: `Incident saved and SMS sent to ${response.data.notifications_sent} contacts`,
+        });
+      } else {
+        toast({
+          title: "✅ Report Saved",
+          description: "Incident report saved to your account",
+        });
+      }
 
       // Reset form
       setIncidentType("");
       setDescription("");
       setDatetime(new Date().toISOString().slice(0, 16));
+      setImages([]);
+      setImagePreviewUrls([]);
     } catch (error) {
+      console.error('Submit error:', error);
       toast({
         title: "Error",
-        description: "Failed to submit report. Please try again.",
+        description: error.message || "Failed to submit report. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -114,7 +195,7 @@ Reported by: ${user?.email}
         </div>
       </header>
 
-      <main className="pt-20 px-4">
+      <main className="pt-20 px-4 md:pt-32 lg:pt-20 lg:pl-60">
         <div className="max-w-md mx-auto space-y-6">
           <Card>
             <CardHeader>
@@ -177,9 +258,49 @@ Reported by: ${user?.email}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Provide details about the incident..."
-                    rows={6}
+                    rows={4}
                     required
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="images" className="flex items-center gap-2">
+                    <Camera className="w-4 h-4" />
+                    Evidence Photos (Optional)
+                  </Label>
+                  <Input
+                    id="images"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload up to 3 images, max 5MB each
+                  </p>
+                  
+                  {/* Image Previews */}
+                  {imagePreviewUrls.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      {imagePreviewUrls.map((url, index) => (
+                        <div key={index} className="relative">
+                          <img
+                            src={url}
+                            alt={`Evidence ${index + 1}`}
+                            className="w-full h-20 object-cover rounded border"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <Button 
@@ -202,6 +323,7 @@ Reported by: ${user?.email}
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>• Your report will be sent to your emergency contacts</p>
               <p>• Include as many details as possible</p>
+              <p>• Add photos as evidence if safe to do so</p>
               <p>• For immediate danger, use the SOS button instead</p>
               <p>• Consider reporting to local authorities if appropriate</p>
             </CardContent>

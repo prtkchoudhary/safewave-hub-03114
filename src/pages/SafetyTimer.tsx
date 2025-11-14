@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Play, Pause, X, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,57 @@ const SafetyTimer = () => {
     }
   }, [user, navigate]);
 
+  const handleTimerExpired = useCallback(async () => {
+    setIsActive(false);
+    
+    try {
+      // Update timer status in database
+      const { error: dbError } = await supabase
+        .from('safety_timers')
+        .update({ 
+          status: 'expired',
+          emergency_triggered: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user?.id)
+        .eq('status', 'active');
+
+      if (dbError) {
+        console.error('Error updating timer:', dbError);
+      }
+
+      // Send Twilio SMS via edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const response = await supabase.functions.invoke('emergency-notifications', {
+          body: {
+            type: 'timer_expired',
+            user_id: session.user.id,
+            message: `Safety timer expired after ${minutes} minutes`
+          }
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message);
+        }
+
+        const notificationsSent = response.data?.notifications_sent ?? 0;
+        toast({
+          title: "⚠️ Emergency Alert Sent",
+          description: `SMS sent to ${notificationsSent} contact${notificationsSent !== 1 ? 's' : ''}`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error sending timer expiry alert:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send automatic alert. Please contact emergency contacts manually.",
+        variant: "destructive",
+      });
+    }
+  }, [user, minutes, toast]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isActive && timeLeft > 0) {
@@ -35,54 +86,98 @@ const SafetyTimer = () => {
       handleTimerExpired();
     }
     return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
+  }, [isActive, timeLeft, handleTimerExpired]);
 
-  const handleTimerExpired = async () => {
-    setIsActive(false);
-    
-    const { data: contacts } = await supabase
-      .from('emergency_contacts')
-      .select('*')
-      .eq('user_id', user?.id);
-
-    if (contacts && contacts.length > 0) {
-      const primaryContact = contacts.find(c => c.is_primary) || contacts[0];
-      const message = encodeURIComponent(
-        `⚠️ SAFETY CHECK-IN MISSED!\n\nYour emergency contact did not check in after ${minutes} minutes. Their last location should be checked immediately.`
-      );
-      window.open(`https://wa.me/${primaryContact.phone}?text=${message}`, '_blank');
+  const startTimer = async () => {
+    if (minutes > 0 && minutes <= 240) {
+      setTimeLeft(minutes * 60);
+      setIsActive(true);
       
+      // Save timer session to database
+      try {
+        const { error } = await supabase
+          .from('safety_timers')
+          .insert({
+            user_id: user?.id,
+            duration_minutes: minutes,
+            start_time: new Date().toISOString(),
+            end_time: new Date(Date.now() + minutes * 60 * 1000).toISOString(),
+            status: 'active',
+            check_in_message: checkInMessage
+          });
+
+        if (error) {
+          console.error('Error saving timer:', error);
+        }
+      } catch (error) {
+        console.error('Database error:', error);
+      }
+
       toast({
-        title: "⚠️ Alert Sent",
-        description: "Emergency contacts notified of missed check-in",
+        title: "Safety Timer Started",
+        description: `Check in within ${minutes} minutes or alert will be sent`,
+      });
+    } else {
+      toast({
+        title: "Invalid Duration",
+        description: "Please enter a duration between 1-240 minutes",
         variant: "destructive",
       });
     }
   };
 
-  const startTimer = () => {
-    if (minutes > 0) {
-      setTimeLeft(minutes * 60);
-      setIsActive(true);
-      toast({
-        title: "Safety Timer Started",
-        description: `Check in within ${minutes} minutes or alert will be sent`,
-      });
-    }
-  };
-
-  const checkIn = () => {
+  const checkIn = async () => {
     setIsActive(false);
     setTimeLeft(0);
+
+    // Update timer status in database
+    try {
+      const { error } = await supabase
+        .from('safety_timers')
+        .update({ 
+          status: 'completed',
+          emergency_triggered: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user?.id)
+        .eq('status', 'active');
+
+      if (error) {
+        console.error('Error updating timer:', error);
+      }
+    } catch (error) {
+      console.error('Database error:', error);
+    }
+
     toast({
       title: "✅ Checked In Successfully",
       description: "Stay safe!",
     });
   };
 
-  const cancelTimer = () => {
+  const cancelTimer = async () => {
     setIsActive(false);
     setTimeLeft(0);
+
+    // Update timer status in database
+    try {
+      const { error } = await supabase
+        .from('safety_timers')
+        .update({ 
+          status: 'cancelled',
+          emergency_triggered: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user?.id)
+        .eq('status', 'active');
+
+      if (error) {
+        console.error('Error updating timer:', error);
+      }
+    } catch (error) {
+      console.error('Database error:', error);
+    }
+
     toast({
       title: "Timer Cancelled",
       description: "Safety timer has been stopped",
@@ -112,7 +207,7 @@ const SafetyTimer = () => {
         </div>
       </header>
 
-      <main className="pt-20 px-4">
+      <main className="pt-20 px-4 md:pt-32 lg:pt-20 lg:pl-60">
         <div className="max-w-md mx-auto space-y-6">
           <Card className="border-2">
             <CardHeader>
@@ -135,9 +230,23 @@ const SafetyTimer = () => {
                       min="1"
                       max="240"
                       value={minutes}
-                      onChange={(e) => setMinutes(parseInt(e.target.value) || 30)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          setMinutes(0);
+                        } else {
+                          const numValue = parseInt(value);
+                          if (!isNaN(numValue) && numValue >= 1 && numValue <= 240) {
+                            setMinutes(numValue);
+                          }
+                        }
+                      }}
+                      placeholder="30"
                       className="mt-1"
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter duration between 1-240 minutes
+                    </p>
                   </div>
                   <Button 
                     onClick={startTimer} 

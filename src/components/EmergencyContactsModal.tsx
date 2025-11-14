@@ -23,7 +23,12 @@ type Contact = {
 
 const contactSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  phone: z.string().min(10, 'Phone must be at least 10 digits'),
+  phone: z.string()
+    .min(10, 'Phone must be at least 10 digits')
+    .regex(/^[+]?[\d\s\-()]+$/, 'Phone must contain only numbers, spaces, dashes, parentheses, and optional + prefix')
+    .refine((val) => val.replace(/[\s\-()]/g, '').length >= 10, {
+      message: 'Phone must have at least 10 digits',
+    }),
   relationship: z.string().optional(),
 });
 

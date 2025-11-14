@@ -14,7 +14,246 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      emergency_contacts: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_primary: boolean | null
+          name: string
+          phone: string
+          relationship: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          name: string
+          phone: string
+          relationship?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_primary?: boolean | null
+          name?: string
+          phone?: string
+          relationship?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      incidents: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          incident_type: string
+          latitude: number | null
+          location: string | null
+          longitude: number | null
+          severity: string | null
+          status: string | null
+          title: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          incident_type: string
+          latitude?: number | null
+          location?: string | null
+          longitude?: number | null
+          severity?: string | null
+          status?: string | null
+          title: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          incident_type?: string
+          latitude?: number | null
+          location?: string | null
+          longitude?: number | null
+          severity?: string | null
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      location_shares: {
+        Row: {
+          accuracy: number | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          latitude: number
+          longitude: number
+          shared_with: string[] | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          latitude: number
+          longitude: number
+          shared_with?: string[] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          latitude?: number
+          longitude?: number
+          shared_with?: string[] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          emergency_contact_phone: string | null
+          full_name: string | null
+          id: string
+          phone_number: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          emergency_contact_phone?: string | null
+          full_name?: string | null
+          id: string
+          phone_number?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          emergency_contact_phone?: string | null
+          full_name?: string | null
+          id?: string
+          phone_number?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      safety_timers: {
+        Row: {
+          check_in_message: string | null
+          created_at: string | null
+          duration_minutes: number
+          emergency_triggered: boolean | null
+          end_time: string | null
+          id: string
+          start_time: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          check_in_message?: string | null
+          created_at?: string | null
+          duration_minutes: number
+          emergency_triggered?: boolean | null
+          end_time?: string | null
+          id?: string
+          start_time?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          check_in_message?: string | null
+          created_at?: string | null
+          duration_minutes?: number
+          emergency_triggered?: boolean | null
+          end_time?: string | null
+          id?: string
+          start_time?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      sos_activations: {
+        Row: {
+          contacts_notified: string[] | null
+          created_at: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          message: string | null
+          resolved_at: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          contacts_notified?: string[] | null
+          created_at?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          message?: string | null
+          resolved_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          contacts_notified?: string[] | null
+          created_at?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          message?: string | null
+          resolved_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

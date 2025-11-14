@@ -46,7 +46,7 @@ const QuickActions = ({ onContactsClick }: QuickActionsProps) => {
         },
         {
           enableHighAccuracy: true,
-          timeout: 5000,
+          timeout: 15000,
           maximumAge: 0
         }
       );
@@ -56,72 +56,95 @@ const QuickActions = ({ onContactsClick }: QuickActionsProps) => {
   };
 
   return (
-    <div className="space-y-3">
-      {/* Featured Emergency Card */}
+    <div className="space-y-4">
+      {/* Featured Emergency Hotline */}
       <Dialog open={helplineDialogOpen} onOpenChange={setHelplineDialogOpen}>
         <DialogTrigger asChild>
-          <Card className="p-6 bg-gradient-to-br from-destructive/10 via-destructive/5 to-background border-destructive/20 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer group">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-destructive/20 to-destructive/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Phone className="w-8 h-8 text-destructive" />
+          <div className="relative group cursor-pointer">
+            <div className="absolute inset-0 bg-gradient-to-r from-destructive/20 via-destructive/10 to-transparent rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Card className="relative p-6 bg-gradient-to-br from-destructive/10 via-card/50 to-card/30 backdrop-blur-sm border-destructive/30 hover:border-destructive/50 transition-all duration-300 overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-destructive/5 rounded-full blur-2xl" />
+              <div className="relative flex items-center gap-5">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-destructive/30 rounded-2xl blur-md" />
+                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-destructive/30 to-destructive/20 flex items-center justify-center border border-destructive/40 group-hover:scale-110 transition-transform">
+                    <Phone className="w-8 h-8 text-destructive" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg text-foreground mb-1 uppercase tracking-wide">Emergency Hotline</h3>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Immediate Response • 24/7</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-lg text-foreground mb-1">Emergency Helplines</h3>
-                <p className="text-sm text-muted-foreground">Tap to dial emergency services</p>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </DialogTrigger>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm bg-card/95 backdrop-blur-xl border-destructive/30">
           <DialogHeader>
-            <DialogTitle className="text-xl">Emergency Services</DialogTitle>
-            <DialogDescription>
-              Choose a service to dial immediately
+            <DialogTitle className="text-xl font-bold uppercase tracking-wider text-destructive">
+              Emergency Services
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Direct line to emergency response
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 py-4">
+          <div className="grid gap-2 py-4">
             {helplines.map((helpline) => (
               <Button
                 key={helpline.number}
                 onClick={() => dialNumber(helpline.number)}
                 variant="outline"
-                className="h-auto py-4 px-4 justify-start hover:bg-destructive/10 hover:border-destructive/50 transition-all group"
+                className="h-auto py-4 px-4 justify-start hover:bg-destructive/10 hover:border-destructive/40 transition-all group border-border/50"
               >
                 <span className="text-2xl mr-3 group-hover:scale-125 transition-transform">{helpline.icon}</span>
                 <div className="text-left flex-1">
-                  <div className="font-semibold text-base">{helpline.name}</div>
-                  <div className="text-sm text-muted-foreground">{helpline.number}</div>
+                  <div className="font-bold text-base">{helpline.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono">{helpline.number}</div>
                 </div>
-                <Phone className="w-5 h-5 text-muted-foreground group-hover:text-destructive" />
+                <Phone className="w-5 h-5 text-muted-foreground group-hover:text-destructive transition-colors" />
               </Button>
             ))}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Secondary Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card
+      {/* Tactical Actions Grid */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Emergency Contacts */}
+        <div
           onClick={onContactsClick}
-          className="p-5 bg-gradient-to-br from-primary/10 to-background border-primary/20 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer group"
+          className="relative group cursor-pointer"
         >
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-            <Users className="w-7 h-7 text-primary" />
-          </div>
-          <h3 className="font-semibold text-foreground mb-1">My Contacts</h3>
-          <p className="text-xs text-muted-foreground">Manage emergency contacts</p>
-        </Card>
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
+          <Card className="relative h-full p-5 bg-card/30 backdrop-blur-sm border-primary/20 hover:border-primary/40 transition-all duration-300 overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
+            <div className="relative">
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center mb-4 border border-primary/30 group-hover:scale-110 transition-transform">
+                <Users className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-foreground mb-1 uppercase tracking-wide text-sm">Contacts</h3>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Emergency Network</p>
+            </div>
+          </Card>
+        </div>
 
-        <Card
+        {/* Safe Zones */}
+        <div
           onClick={openSafeZones}
-          className="p-5 bg-gradient-to-br from-accent/10 to-background border-accent/20 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer group"
+          className="relative group cursor-pointer"
         >
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-            <MapPin className="w-7 h-7 text-accent" />
-          </div>
-          <h3 className="font-semibold text-foreground mb-1">Safe Zones</h3>
-          <p className="text-xs text-muted-foreground">Find nearby help</p>
-        </Card>
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
+          <Card className="relative h-full p-5 bg-card/30 backdrop-blur-sm border-primary/20 hover:border-primary/40 transition-all duration-300 overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
+            <div className="relative">
+              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center mb-4 border border-primary/30 group-hover:scale-110 transition-transform">
+                <MapPin className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-foreground mb-1 uppercase tracking-wide text-sm">Safe Zones</h3>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Nearby Refuge</p>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

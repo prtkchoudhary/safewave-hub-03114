@@ -1,88 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Custom chat styles */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sentinel-grain {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  .sentinel-glow-cyan {
+    box-shadow: 0 0 20px hsla(191, 100%, 50%, 0.3), 0 0 40px hsla(191, 100%, 50%, 0.15);
+  }
+
+  .sentinel-glow-coral {
+    box-shadow: 0 0 20px hsla(14, 100%, 60%, 0.4), 0 0 40px hsla(14, 100%, 60%, 0.2);
+  }
+
+  .hexagon-clip {
+    clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+  }
+}
+
+/* SENTINEL Design System - Guardian Protection Aesthetic */
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 200 30% 15%;
+    /* Deep navy to midnight gradient background */
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 200 30% 15%;
+    /* Glass-morphic cards with subtle blue tint */
+    --card: 220 35% 9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 200 30% 15%;
+    --popover: 220 35% 9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 195 85% 35%;
-    --primary-foreground: 0 0% 100%;
-    --primary-glow: 195 85% 45%;
+    /* Electric Cyan - Protection Field */
+    --primary: 191 100% 50%;
+    --primary-foreground: 222 47% 5%;
+    --primary-glow: 191 100% 60%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 195 85% 35%;
+    /* Deep blue secondary */
+    --secondary: 220 30% 15%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 30% 94%;
-    --muted-foreground: 200 15% 45%;
+    --muted: 220 25% 18%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 15 85% 60%;
+    /* Warm Coral - Alert/Emergency */
+    --accent: 14 100% 60%;
     --accent-foreground: 0 0% 100%;
-    --accent-glow: 15 90% 70%;
+    --accent-glow: 14 100% 70%;
 
-    --destructive: 0 84% 60%;
+    /* Bright coral for critical alerts */
+    --destructive: 8 90% 62%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 30% 88%;
-    --input: 210 30% 88%;
-    --ring: 195 85% 35%;
+    /* Emerald for safe/success states */
+    --success: 158 64% 52%;
+    --success-foreground: 0 0% 100%;
 
-    --radius: 0.75rem;
+    --border: 220 30% 18%;
+    --input: 220 30% 18%;
+    --ring: 191 100% 50%;
 
-    --gradient-hero: linear-gradient(135deg, hsl(195 85% 35%), hsl(195 85% 45%));
-    --gradient-card: linear-gradient(to bottom, hsl(0 0% 100%), hsl(210 40% 99%));
-    --shadow-soft: 0 4px 20px -2px hsl(195 85% 35% / 0.08);
-    --shadow-glow: 0 0 30px hsl(195 85% 45% / 0.15);
-    --shadow-accent: 0 4px 20px -2px hsl(15 85% 60% / 0.2);
+    --radius: 0.875rem;
+
+    /* Cinematic gradients */
+    --gradient-radial: radial-gradient(circle at center, hsl(191 100% 50% / 0.08) 0%, transparent 70%);
+    --gradient-hero: linear-gradient(135deg, hsl(222 47% 5%), hsl(220 40% 8%));
+    --gradient-card: linear-gradient(to bottom, hsl(220 35% 9% / 0.6), hsl(220 35% 7% / 0.4));
+    --gradient-protection: linear-gradient(135deg, hsl(191 100% 50% / 0.15), hsl(191 100% 60% / 0.05));
+    --gradient-alert: linear-gradient(135deg, hsl(14 100% 60% / 0.2), hsl(14 100% 70% / 0.1));
+
+    /* Dramatic shadows */
+    --shadow-soft: 0 8px 32px -4px hsl(222 47% 3% / 0.5);
+    --shadow-glow-cyan: 0 0 30px hsl(191 100% 50% / 0.3), 0 8px 32px -4px hsl(222 47% 3% / 0.5);
+    --shadow-glow-coral: 0 0 40px hsl(14 100% 60% / 0.4), 0 8px 32px -4px hsl(222 47% 3% / 0.5);
+    --shadow-elevation: 0 20px 60px -12px hsl(222 47% 3% / 0.7);
   }
 
   .dark {
-    --background: 200 30% 8%;
+    --background: 222 47% 5%;
     --foreground: 210 40% 98%;
-
-    --card: 200 25% 12%;
+    --card: 220 35% 9%;
     --card-foreground: 210 40% 98%;
-
-    --popover: 200 25% 12%;
+    --popover: 220 35% 9%;
     --popover-foreground: 210 40% 98%;
-
-    --primary: 195 85% 45%;
-    --primary-foreground: 200 30% 8%;
-    --primary-glow: 195 85% 55%;
-
-    --secondary: 200 25% 16%;
+    --primary: 191 100% 50%;
+    --primary-foreground: 222 47% 5%;
+    --primary-glow: 191 100% 60%;
+    --secondary: 220 30% 15%;
     --secondary-foreground: 210 40% 98%;
-
-    --muted: 200 25% 16%;
-    --muted-foreground: 210 20% 65%;
-
-    --accent: 15 85% 60%;
+    --muted: 220 25% 18%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 14 100% 60%;
     --accent-foreground: 0 0% 100%;
-    --accent-glow: 15 90% 70%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 200 25% 20%;
-    --input: 200 25% 20%;
-    --ring: 195 85% 45%;
-
-    --gradient-hero: linear-gradient(135deg, hsl(195 85% 25%), hsl(195 85% 35%));
-    --gradient-card: linear-gradient(to bottom, hsl(200 25% 12%), hsl(200 25% 14%));
-    --shadow-soft: 0 4px 20px -2px hsl(195 85% 45% / 0.15);
-    --shadow-glow: 0 0 30px hsl(195 85% 55% / 0.2);
-    --shadow-accent: 0 4px 20px -2px hsl(15 85% 60% / 0.3);
+    --accent-glow: 14 100% 70%;
+    --destructive: 8 90% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 158 64% 52%;
+    --success-foreground: 0 0% 100%;
+    --border: 220 30% 18%;
+    --input: 220 30% 18%;
+    --ring: 191 100% 50%;
   }
 }
 
@@ -93,5 +125,75 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: 'ss01' on, 'ss02' on;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Rajdhani', 'DM Sans', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+}
+
+/* Sentinel Animations */
+@keyframes sentinel-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes sentinel-beacon {
+  0%, 100% {
+    box-shadow: 0 0 20px hsla(14, 100%, 60%, 0.6), 0 0 40px hsla(14, 100%, 60%, 0.3), 0 0 60px hsla(14, 100%, 60%, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px hsla(14, 100%, 60%, 0.8), 0 0 60px hsla(14, 100%, 60%, 0.5), 0 0 90px hsla(14, 100%, 60%, 0.2);
+  }
+}
+
+@keyframes sentinel-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes sentinel-shield-activate {
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-sentinel-pulse {
+  animation: sentinel-pulse 2s ease-in-out infinite;
+}
+
+.animate-sentinel-beacon {
+  animation: sentinel-beacon 1.5s ease-in-out infinite;
+}
+
+.animate-sentinel-ripple {
+  animation: sentinel-ripple 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-sentinel-shield {
+  animation: sentinel-shield-activate 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
