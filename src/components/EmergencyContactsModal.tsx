@@ -33,14 +33,24 @@ const contactSchema = z.object({
 });
 
 const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps) => {
+  console.log('🎨 EmergencyContactsModal rendered, isOpen:', isOpen);
+  
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState({ name: "", phone: "", relationship: "" });
   const { toast } = useToast();
 
+  console.log('📊 State:', { 
+    isAdding, 
+    editingId, 
+    contactsCount: contacts.length,
+    newContact 
+  });
+
   useEffect(() => {
     if (isOpen) {
+      console.log('📂 Modal opened, fetching contacts...');
       fetchContacts();
     }
   }, [isOpen]);
@@ -64,24 +74,44 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
   };
 
   const handleAdd = async () => {
+    console.log('🚀 handleAdd called');
+    console.log('📝 New contact data:', newContact);
+    
     try {
+      // Validate input
+      console.log('✅ Validating contact data...');
       contactSchema.parse(newContact);
+      console.log('✅ Validation passed');
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      // Skip async auth check - let database RLS handle authentication
+      // RLS will automatically use auth.uid() from the JWT token
+      console.log('💾 Preparing to insert contact (RLS will handle auth)...');
+      
+      const contactData = {
+        // Don't set user_id - let RLS handle it via auth.uid()
+        name: newContact.name,
+        phone: newContact.phone,
+        relationship: newContact.relationship || null,
+        is_primary: contacts.length === 0,
+      };
+      
+      console.log('📦 Contact data:', contactData);
+      console.log('🔄 Inserting into database...');
 
       // @ts-ignore - Database types will regenerate after migration deploys
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('emergency_contacts')
-        .insert([{
-          user_id: user.id,
-          name: newContact.name,
-          phone: newContact.phone,
-          relationship: newContact.relationship || null,
-          is_primary: contacts.length === 0,
-        }]);
+        .insert([contactData])
+        .select();
 
-      if (error) throw error;
+      console.log('📨 Insert response:', { data, error });
+
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+
+      console.log('✅ Contact added successfully!');
 
       toast({
         title: "Contact Added",
@@ -92,16 +122,21 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
       setIsAdding(false);
       fetchContacts();
     } catch (error) {
+      console.error('❌❌❌ Error in handleAdd:', error);
+      
       if (error instanceof z.ZodError) {
+        console.error('Validation errors:', error.errors);
         toast({
           title: "Validation Error",
           description: error.errors[0].message,
           variant: "destructive",
         });
       } else {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to add contact';
+        console.error('Error message:', errorMessage);
         toast({
           title: "Error",
-          description: "Failed to add contact",
+          description: errorMessage,
           variant: "destructive",
         });
       }
@@ -248,7 +283,10 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
               <Label>Name</Label>
               <Input
                 value={newContact.name}
-                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                onChange={(e) => {
+                  console.log('📝 Name changed:', e.target.value);
+                  setNewContact({ ...newContact, name: e.target.value });
+                }}
                 placeholder="Contact name"
                 className="bg-background"
               />
@@ -257,7 +295,10 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
               <Label>Phone Number</Label>
               <Input
                 value={newContact.phone}
-                onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                onChange={(e) => {
+                  console.log('📱 Phone changed:', e.target.value);
+                  setNewContact({ ...newContact, phone: e.target.value });
+                }}
                 placeholder="+1234567890"
                 className="bg-background"
               />
@@ -266,26 +307,51 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
               <Label>Relationship (Optional)</Label>
               <Input
                 value={newContact.relationship}
-                onChange={(e) => setNewContact({ ...newContact, relationship: e.target.value })}
+                onChange={(e) => {
+                  console.log('👥 Relationship changed:', e.target.value);
+                  setNewContact({ ...newContact, relationship: e.target.value });
+                }}
                 placeholder="Friend, Family, etc."
                 className="bg-background"
               />
             </div>
             <div className="flex gap-2">
-              <Button 
-                onClick={editingId ? handleUpdate : handleAdd} 
-                className="flex-1 bg-primary text-primary-foreground"
+              <button
+                type="button"
+                onClick={(e) => {
+                  console.log('🖱️🖱️🖱️ BUTTON CLICKED - Raw button event!', e);
+                  console.log('Is editing?', !!editingId);
+                  console.log('Current newContact:', newContact);
+                  if (editingId) {
+                    console.log('Calling handleUpdate...');
+                    handleUpdate();
+                  } else {
+                    console.log('Calling handleAdd...');
+                    handleAdd();
+                  }
+                }}
+                className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
                 {editingId ? "Update Contact" : "Save Contact"}
-              </Button>
-              <Button onClick={handleCancel} variant="outline" className="flex-1">
+              </button>
+              <Button 
+                onClick={() => {
+                  console.log('❌ Cancel clicked');
+                  handleCancel();
+                }}
+                variant="outline" 
+                className="flex-1"
+              >
                 Cancel
               </Button>
             </div>
           </Card>
         ) : (
           <Button
-            onClick={() => setIsAdding(true)}
+            onClick={() => {
+              console.log('➕ Add Emergency Contact button clicked');
+              setIsAdding(true);
+            }}
             className="w-full bg-primary text-primary-foreground"
           >
             <Plus className="w-5 h-5 mr-2" />

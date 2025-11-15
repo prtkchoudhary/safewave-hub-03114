@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Gemini Chat Function</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .status.pending { background: #fff3cd; color: #856404; }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 14px;
+            margin: 10px 0;
+            font-family: inherit;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .response {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .config {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+        .config code {
+            background: #fff;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ SafeGuard Chat Function Tester</h1>
+        <p>Test if your Gemini edge function is working</p>
+
+        <div class="config">
+            <strong>Configuration:</strong><br>
+            <strong>Supabase URL:</strong> <code id="supabaseUrl"></code><br>
+            <strong>Function:</strong> <code>gemini-safety-chat</code><br>
+            <strong>Project ID:</strong> <code id="projectId"></code>
+        </div>
+
+        <div id="status" class="status pending">⏳ Ready to test</div>
+
+        <label><strong>Test Message:</strong></label>
+        <textarea id="message" placeholder="Type your message here...">I need help, show me safe places near me</textarea>
+
+        <div>
+            <button onclick="testFunction()" id="testBtn">🚀 Test Function</button>
+            <button onclick="testAuth()" id="authBtn">🔐 Test Auth</button>
+            <button onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+
+        <div id="response" class="response" style="display:none;"></div>
+
+        <div class="config" style="margin-top: 30px;">
+            <strong>⚠️ Troubleshooting:</strong><br>
+            1. Make sure edge function is deployed in Supabase Dashboard<br>
+            2. Add GEMINI_API_KEY secret in Project Settings → Edge Functions<br>
+            3. Check browser console (F12) for detailed errors<br>
+            4. If "404 Not Found" → Function not deployed<br>
+            5. If "401 Unauthorized" → Check auth token<br>
+            6. If "API key not configured" → Add GEMINI_API_KEY secret
+        </div>
+    </div>
+
+    <script type="module">
+        // Import from env
+        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'YOUR_SUPABASE_ANON_KEY';
+        const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'YOUR_PROJECT_ID';
+
+        document.getElementById('supabaseUrl').textContent = SUPABASE_URL;
+        document.getElementById('projectId').textContent = PROJECT_ID;
+
+        window.testFunction = async function() {
+            const statusEl = document.getElementById('status');
+            const responseEl = document.getElementById('response');
+            const messageEl = document.getElementById('message');
+            const testBtn = document.getElementById('testBtn');
+
+            testBtn.disabled = true;
+            statusEl.className = 'status pending';
+            statusEl.textContent = '⏳ Testing function...';
+            responseEl.style.display = 'none';
+
+            try {
+                console.log('Testing Supabase function...');
+                console.log('URL:', `${SUPABASE_URL}/functions/v1/gemini-safety-chat`);
+
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/gemini-safety-chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'apikey': SUPABASE_ANON_KEY
+                    },
+                    body: JSON.stringify({
+                        message: messageEl.value,
+                        conversation_history: [],
+                        emergency_context: {
+                            location: {
+                                latitude: 40.7128,
+                                longitude: -74.0060,
+                                address: "New York, NY, USA"
+                            }
+                        }
+                    })
+                });
+
+                console.log('Response status:', response.status);
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (response.ok) {
+                    statusEl.className = 'status success';
+                    statusEl.textContent = '✅ Function is working!';
+                    responseEl.style.display = 'block';
+                    responseEl.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+            } catch (error) {
+                console.error('Test failed:', error);
+                statusEl.className = 'status error';
+                statusEl.textContent = `❌ Error: ${error.message}`;
+                responseEl.style.display = 'block';
+                responseEl.textContent = `Error Details:\n${error.stack || error.message}\n\nCheck browser console (F12) for more info.`;
+            } finally {
+                testBtn.disabled = false;
+            }
+        };
+
+        window.testAuth = async function() {
+            const statusEl = document.getElementById('status');
+            const responseEl = document.getElementById('response');
+            const authBtn = document.getElementById('authBtn');
+
+            authBtn.disabled = true;
+            statusEl.className = 'status pending';
+            statusEl.textContent = '⏳ Testing authentication...';
+            responseEl.style.display = 'none';
+
+            try {
+                // Test if Supabase is accessible
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY
+                    }
+                });
+
+                if (response.ok || response.status === 404) {
+                    statusEl.className = 'status success';
+                    statusEl.textContent = '✅ Supabase connection OK';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.textContent = `❌ Connection failed: ${error.message}`;
+            } finally {
+                authBtn.disabled = false;
+            }
+        };
+
+        window.clearLogs = function() {
+            document.getElementById('response').style.display = 'none';
+            document.getElementById('status').className = 'status pending';
+            document.getElementById('status').textContent = '⏳ Ready to test';
+        };
+
+        // Auto-test on load
+        console.log('Page loaded. Click "Test Function" to check if edge function works.');
+    </script>
+</body>
+</html>

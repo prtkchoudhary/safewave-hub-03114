@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Send, Sparkles, Shield, MapPin, Clock, FileText, Phone, AlertTriangle, Zap, Heart, Users, Camera, Timer, Navigation } from "lucide-react";
+import { X, Send, Sparkles, Shield, MapPin, Clock, FileText, Phone, AlertTriangle, Zap, Heart, Users, Camera, Timer, Navigation, Mic, MicOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase-temp";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Message = {
   role: "user" | "assistant";
@@ -18,7 +19,93 @@ type ChatOverlayProps = {
   onClose: () => void;
 };
 
+// Format AI response text with proper markdown-like formatting
+const formatMessage = (text: string) => {
+  // Split by lines
+  const lines = text.split('\n');
+  const formatted = [];
+  
+  const formatLine = (line: string, index: number) => {
+    // Replace **bold** with <strong>
+    const parts: (string | JSX.Element)[] = [];
+    let lastIndex = 0;
+    // Updated regex to properly match **text** including with colons and at line start
+    const boldRegex = /\*\*([^*]+?)\*\*/g;
+    let match;
+    let partKey = 0;
+    
+    while ((match = boldRegex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        const textBefore = line.substring(lastIndex, match.index);
+        if (textBefore) {
+          parts.push(<span key={`text-${index}-${partKey++}`}>{textBefore}</span>);
+        }
+      }
+      parts.push(
+        <strong key={`bold-${index}-${partKey++}`} className="font-bold text-primary">
+          {match[1]}
+        </strong>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    
+    if (lastIndex < line.length) {
+      const textAfter = line.substring(lastIndex);
+      if (textAfter) {
+        parts.push(<span key={`text-${index}-${partKey++}`}>{textAfter}</span>);
+      }
+    }
+    
+    return parts.length > 0 ? parts : <span>{line}</span>;
+  };
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const trimmedLine = line.trim();
+    
+    if (!trimmedLine) {
+      formatted.push(<div key={`br-${i}`} className="h-2" />);
+      continue;
+    }
+    
+    // Check for bullet points (- or • or *)
+    if (trimmedLine.match(/^[-•\*]\s/)) {
+      const content = trimmedLine.replace(/^[-•\*]\s/, '');
+      formatted.push(
+        <div key={`bullet-${i}`} className="flex gap-2 mb-1 ml-2">
+          <span className="text-primary mt-1">•</span>
+          <div className="flex-1">{formatLine(content, i)}</div>
+        </div>
+      );
+    }
+    // Check for numbered lists (1. 2. etc)
+    else if (trimmedLine.match(/^\d+\.\s/)) {
+      const match = trimmedLine.match(/^(\d+)\.\s(.+)/);
+      if (match) {
+        const number = match[1];
+        const content = match[2];
+        formatted.push(
+          <div key={`num-${i}`} className="flex gap-2 mb-1 ml-2">
+            <span className="text-primary font-semibold">{number}.</span>
+            <div className="flex-1">{formatLine(content, i)}</div>
+          </div>
+        );
+      }
+    }
+    else {
+      formatted.push(
+        <p key={`line-${i}`} className="mb-2 last:mb-0 leading-relaxed">
+          {formatLine(trimmedLine, i)}
+        </p>
+      );
+    }
+  }
+  
+  return <div className="space-y-1">{formatted}</div>;
+};
+
 const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -27,6 +114,7 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
       suggested_actions: [],
     },
   ]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const emergencyOptions = [
     { icon: AlertTriangle, text: "I'm in immediate danger", color: "bg-red-500", priority: "emergency" },
@@ -50,7 +138,10 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
   ];
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -61,6 +152,229 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load chat history from database
+  const loadChatHistory = async () => {
+    if (!user) return;
+
+    setIsLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const loadedMessages: Message[] = data.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.created_at,
+          suggested_actions: msg.suggested_actions || [],
+        }));
+
+        // Keep the initial assistant message, then add loaded messages
+        setMessages([
+          {
+            role: "assistant",
+            content: "Hi! I'm SafeGuard AI, your personal safety assistant. I'm here to help you stay safe and provide guidance during emergencies or safety concerns. How can I help you today?",
+            timestamp: new Date().toISOString(),
+            suggested_actions: [],
+          },
+          ...loadedMessages
+        ]);
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Save message to database
+  const saveMessage = async (message: Message) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('chat_messages')
+        .insert({
+          user_id: user.id,
+          role: message.role,
+          content: message.content,
+          suggested_actions: message.suggested_actions || [],
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving message:', error);
+    }
+  };
+
+  // Clear all chat messages
+  const clearChatHistory = async () => {
+    if (!user) {
+      // For non-authenticated users, just clear local state
+      setMessages([
+        {
+          role: "assistant",
+          content: "Hi! I'm SafeGuard AI, your personal safety assistant. I'm here to help you stay safe and provide guidance during emergencies or safety concerns. How can I help you today?",
+          timestamp: new Date().toISOString(),
+          suggested_actions: [],
+        },
+      ]);
+      toast({
+        title: "Chat Cleared",
+        description: "Your chat history has been cleared.",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Reset to initial message
+      setMessages([
+        {
+          role: "assistant",
+          content: "Hi! I'm SafeGuard AI, your personal safety assistant. I'm here to help you stay safe and provide guidance during emergencies or safety concerns. How can I help you today?",
+          timestamp: new Date().toISOString(),
+          suggested_actions: [],
+        },
+      ]);
+
+      toast({
+        title: "Chat Cleared",
+        description: "Your chat history has been cleared from the database.",
+      });
+    } catch (error) {
+      console.error('Error clearing chat history:', error);
+      toast({
+        title: "Error",
+        description: "Failed to clear chat history. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Load chat history when component mounts and user is available
+  useEffect(() => {
+    if (isOpen && user) {
+      loadChatHistory();
+    }
+  }, [isOpen, user]);
+
+  // Fetch user location when chat opens
+  useEffect(() => {
+    if (isOpen && !userLocation) {
+      fetchUserLocation();
+    }
+  }, [isOpen]);
+
+  const fetchUserLocation = async () => {
+    if (navigator.geolocation) {
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 10000,
+            enableHighAccuracy: true,
+            maximumAge: 300000 // Cache for 5 minutes
+          });
+        });
+        
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+
+        // Reverse geocode to get readable address
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${location.latitude}&lon=${location.longitude}`
+          );
+          const data = await response.json();
+          location.address = data.display_name;
+        } catch (error) {
+          console.log('Failed to get address:', error);
+        }
+
+        setUserLocation(location);
+        
+        toast({
+          title: "Location Enabled",
+          description: "AI can now provide location-aware safety advice",
+        });
+      } catch (error) {
+        console.log('Location permission denied:', error);
+        toast({
+          title: "Location Access",
+          description: "Enable location for personalized safety advice",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Setup speech recognition
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'en-US';
+
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+        setIsRecording(false);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsRecording(false);
+        toast({
+          title: "Voice Input Error",
+          description: "Could not recognize speech. Please try again.",
+          variant: "destructive",
+        });
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsRecording(false);
+      };
+    }
+  }, []);
+
+  const toggleVoiceInput = () => {
+    if (!recognitionRef.current) {
+      toast({
+        title: "Not Supported",
+        description: "Voice input is not supported in this browser",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      recognitionRef.current.start();
+      setIsRecording(true);
+      toast({
+        title: "Listening...",
+        description: "Speak now to input your message",
+      });
+    }
+  };
 
   const handleQuickAction = (action: string) => {
     onClose();
@@ -133,16 +447,19 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
+    // Save user message to database
+    await saveMessage(userMsg);
+
     try {
-      // Get user location for context (if available)
-      let locationContext = undefined;
-      if (navigator.geolocation) {
+      // Use cached location or fetch fresh
+      let locationContext = userLocation;
+      if (!locationContext && navigator.geolocation) {
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 15000,
-              enableHighAccuracy: true,
-              maximumAge: 0
+              timeout: 5000,
+              enableHighAccuracy: false,
+              maximumAge: 300000
             });
           });
           locationContext = {
@@ -155,36 +472,51 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
       }
 
       // Call Gemini API through our edge function
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Not authenticated');
-      }
-
-      const response = await supabase.functions.invoke('gemini-safety-chat', {
-        body: {
+      // Note: For safety emergencies, we use direct anonymous access (no auth check to avoid hanging)
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      const fetchResponse = await fetch(`${SUPABASE_URL}/functions/v1/gemini-safety-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
           message: userMessage,
           conversation_history: messages.slice(1).map(msg => ({
             role: msg.role === 'user' ? 'user' : 'model',
             content: msg.content
           })),
           emergency_context: locationContext ? {
-            location: locationContext
+            location: {
+              latitude: locationContext.latitude,
+              longitude: locationContext.longitude,
+              address: locationContext.address
+            }
           } : undefined
-        }
+        })
       });
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Failed to get AI response');
+      
+      if (!fetchResponse.ok) {
+        const errorText = await fetchResponse.text();
+        throw new Error(`Failed to get AI response: ${fetchResponse.status} ${errorText}`);
       }
+      
+      const responseData = await fetchResponse.json();
 
       const aiMsg: Message = {
         role: "assistant",
-        content: response.data.response,
+        content: responseData.response,
         timestamp: new Date().toISOString(),
-        suggested_actions: response.data.suggested_actions || [],
+        suggested_actions: responseData.suggested_actions || [],
       };
 
       setMessages((prev) => [...prev, aiMsg]);
+      
+      // Save AI response to database
+      await saveMessage(aiMsg);
 
     } catch (error) {
       console.error('Chat error:', error);
@@ -233,14 +565,31 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
             </p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="text-foreground hover:bg-red-500/20 transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {messages.length > 1 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to clear all chat history? This action cannot be undone.')) {
+                  clearChatHistory();
+                }
+              }}
+              className="text-foreground hover:bg-orange-500/20 transition-colors"
+              title="Clear chat history"
+            >
+              <Trash2 className="w-5 h-5" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="text-foreground hover:bg-red-500/20 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Messages Container */}
@@ -257,7 +606,9 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
                     : "bg-gradient-to-br from-card to-card/80 text-foreground border border-border/50 backdrop-blur-sm"
                 }`}
               >
-                <p className="whitespace-pre-line text-sm leading-relaxed">{message.content}</p>
+                <div className="text-sm leading-relaxed">
+                  {message.role === "assistant" ? formatMessage(message.content) : <p>{message.content}</p>}
+                </div>
                 <p className={`text-xs mt-2 flex items-center gap-1 ${
                   message.role === "user" ? "opacity-70" : "text-muted-foreground"
                 }`}>
@@ -422,26 +773,43 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
           )}
           
           {/* Input Bar */}
-          <div className="flex gap-3 items-end">
+          <div className="flex gap-2 items-end">
             <div className="flex-1 relative">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder="Describe your situation or ask for safety advice..."
+                placeholder={isRecording ? "Listening..." : "Describe your situation or ask for safety advice..."}
                 className="bg-background/80 border-2 border-primary/20 focus:border-primary rounded-xl px-4 py-3 text-sm shadow-lg backdrop-blur-sm"
-                disabled={isLoading}
+                disabled={isLoading || isRecording}
               />
               {isLoading && (
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                   <Sparkles className="w-4 h-4 animate-spin text-primary" />
                 </div>
               )}
+              {isRecording && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                </div>
+              )}
             </div>
+            <Button
+              onClick={toggleVoiceInput}
+              disabled={isLoading}
+              className={`${
+                isRecording 
+                  ? "bg-red-500 hover:bg-red-600 animate-pulse" 
+                  : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+              } text-white rounded-xl px-4 py-3 shadow-lg transition-all duration-200`}
+              title="Voice Input"
+            >
+              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </Button>
             <Button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary text-primary-foreground rounded-xl px-6 py-3 shadow-lg transition-all duration-200 transform hover:scale-105"
+              className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary text-primary-foreground rounded-xl px-4 py-3 shadow-lg transition-all duration-200 transform hover:scale-105"
             >
               <Send className="w-5 h-5" />
             </Button>

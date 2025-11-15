@@ -4,12 +4,15 @@ const SAFETY_AGENT_PROMPT = `You are SafeGuard AI, a compassionate and professio
 
 Key guidelines:
 - Always prioritize user safety and wellbeing
-- Provide practical, actionable safety advice
+- Provide practical, actionable safety advice tailored to their location
 - Be supportive and non-judgmental
 - If someone is in immediate danger, direct them to emergency services (911, 112, etc.)
 - Suggest appropriate app features when relevant (SOS button, safety timer, location sharing, incident reporting, fake call)
-- Keep responses concise but helpful
+- Keep responses concise but helpful (2-4 sentences unless detailed advice is needed)
 - Be culturally sensitive and inclusive
+- When user's location is provided, use it to give specific, location-aware recommendations
+- Mention nearby safe places, police stations, hospitals, or well-lit public areas when relevant
+- Consider time of day and local context when giving advice
 
 Available app features you can suggest:
 - SOS button: For immediate emergency alerts to contacts
@@ -39,6 +42,7 @@ interface RequestBody {
     location?: {
       latitude: number;
       longitude: number;
+      address?: string;
     };
   };
 }
@@ -85,10 +89,28 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Build conversation context
+    // Build conversation context with enhanced location awareness
     let contextualMessage = message;
+    let locationInfo = '';
+    
     if (emergency_context?.location) {
-      contextualMessage += `\n\n[User's current location: ${emergency_context.location.latitude}, ${emergency_context.location.longitude}]`;
+      locationInfo = `\n\n[LOCATION CONTEXT - User is currently at:`;
+      locationInfo += `\n- Coordinates: ${emergency_context.location.latitude}, ${emergency_context.location.longitude}`;
+      
+      if (emergency_context.location.address) {
+        locationInfo += `\n- Address: ${emergency_context.location.address}`;
+      }
+      
+      // Add time context
+      const now = new Date();
+      const hour = now.getUTCHours();
+      const timeOfDay = hour >= 6 && hour < 12 ? 'morning' : 
+                       hour >= 12 && hour < 18 ? 'afternoon' : 
+                       hour >= 18 && hour < 22 ? 'evening' : 'night';
+      locationInfo += `\n- Time of day: ${timeOfDay} (${now.toUTCString()})`;
+      locationInfo += `\n\nIMPORTANT: Use this location information to provide specific, location-aware safety advice. Mention nearby landmarks, safe places, or relevant local context if the user asks about safe places, directions, or location-specific help.]`;
+      
+      contextualMessage += locationInfo;
     }
 
     // Prepare conversation history for Gemini
@@ -166,8 +188,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await response.json();
+    console.log('Gemini API response:', JSON.stringify(data, null, 2));
     
     if (!data.candidates || data.candidates.length === 0) {
+      console.error('No candidates in response:', data);
       return new Response(JSON.stringify({ 
         error: 'No response from AI',
         response: "I'm having trouble generating a response right now. If this is an emergency, please contact local emergency services immediately (911, 112, etc.). You can also use the SOS button in the app for immediate help.",
@@ -178,31 +202,55 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const aiResponse = data.candidates[0].content.parts[0].text;
+    // Safely access nested properties
+    const candidate = data.candidates[0];
+    if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
+      console.error('Invalid candidate structure:', candidate);
+      return new Response(JSON.stringify({ 
+        error: 'Invalid AI response',
+        response: "I'm having trouble generating a response right now. If this is an emergency, please contact local emergency services immediately (911, 112, etc.). You can also use the SOS button in the app for immediate help.",
+        suggested_actions: ['sos_button']
+      }), { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    // Extract suggested actions from AI response
+    const aiResponse = candidate.content.parts[0].text;
+
+    // Extract suggested actions from AI response and user message
     const suggestedActions: string[] = [];
-    const actionMatches = aiResponse.toLowerCase();
+    const responseText = aiResponse.toLowerCase();
+    const userText = message.toLowerCase();
     
-    if (actionMatches.includes('sos') || actionMatches.includes('emergency') || actionMatches.includes('immediate danger')) {
+    // Check both user message and AI response for intent
+    if (responseText.includes('sos') || responseText.includes('call emergency') || responseText.includes('immediate danger') ||
+        userText.includes('danger') || userText.includes('help') || userText.includes('emergency')) {
       suggestedActions.push('sos_button');
     }
-    if (actionMatches.includes('timer') || actionMatches.includes('check in')) {
+    if (responseText.includes('timer') || responseText.includes('check in') || responseText.includes('check-in') ||
+        userText.includes('timer') || userText.includes('check in')) {
       suggestedActions.push('safety_timer');
     }
-    if (actionMatches.includes('location') || actionMatches.includes('share')) {
+    if (responseText.includes('location') || responseText.includes('share') || responseText.includes('track') ||
+        userText.includes('location') || userText.includes('where') || userText.includes('track me')) {
       suggestedActions.push('live_location');
     }
-    if (actionMatches.includes('report') || actionMatches.includes('document')) {
+    if (responseText.includes('report') || responseText.includes('document') || responseText.includes('incident') ||
+        userText.includes('report') || userText.includes('incident')) {
       suggestedActions.push('incident_report');
     }
-    if (actionMatches.includes('fake call') || actionMatches.includes('exit')) {
+    if (responseText.includes('fake call') || responseText.includes('exit') || responseText.includes('pretend') ||
+        userText.includes('fake call') || userText.includes('excuse')) {
       suggestedActions.push('fake_call');
     }
+    
+    // Remove duplicates and limit
+    const uniqueActions = [...new Set(suggestedActions)];
 
     return new Response(JSON.stringify({
       response: aiResponse,
-      suggested_actions: suggestedActions.slice(0, 3) // Limit to 3 suggestions
+      suggested_actions: uniqueActions.slice(0, 3) // Limit to 3 suggestions
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
