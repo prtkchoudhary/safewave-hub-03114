@@ -23,31 +23,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let isInitialized = false;
 
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setIsLoading(false);
-
-        // Check admin status after state update
-        if (session?.user) {
-          try {
-            await checkAdminStatus(session.user.id);
-          } catch (error) {
-            console.error('Error checking admin status:', error);
-            setIsAdmin(false);
-          }
-        } else {
-          setIsAdmin(false);
-        }
-      }
-    );
-
-    // Check for existing session only once with timeout
+    // Check for existing session first (before setting up listener)
     const sessionTimeout = setTimeout(() => {
       console.warn('⚠️ Session check timed out, proceeding anyway');
-      setIsLoading(false);
+      if (!isInitialized) {
+        setIsLoading(false);
+      }
     }, 3000);
 
     supabase.auth.getSession()
@@ -74,6 +55,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.error('❌ Failed to get session:', error);
         setIsLoading(false);
       });
+
+    // Set up auth state listener (after initial session check)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        // Only update if we're initialized (prevents race condition on reload)
+        if (isInitialized) {
+          setSession(session);
+          setUser(session?.user ?? null);
+
+          // Check admin status after state update
+          if (session?.user) {
+            try {
+              await checkAdminStatus(session.user.id);
+            } catch (error) {
+              console.error('Error checking admin status:', error);
+              setIsAdmin(false);
+            }
+          } else {
+            setIsAdmin(false);
+          }
+        }
+      }
+    );
 
     return () => subscription.unsubscribe();
   }, []);
