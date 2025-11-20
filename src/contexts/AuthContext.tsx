@@ -44,38 +44,64 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     );
 
-    // Check for existing session only once
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!isInitialized) {
-        isInitialized = true;
-        setSession(session);
-        setUser(session?.user ?? null);
+    // Check for existing session only once with timeout
+    const sessionTimeout = setTimeout(() => {
+      console.warn('⚠️ Session check timed out, proceeding anyway');
+      setIsLoading(false);
+    }, 3000);
 
-        if (session?.user) {
-          try {
-            await checkAdminStatus(session.user.id);
-          } catch (error) {
-            console.error('Error checking admin status:', error);
-            setIsAdmin(false);
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        clearTimeout(sessionTimeout);
+        if (!isInitialized) {
+          isInitialized = true;
+          setSession(session);
+          setUser(session?.user ?? null);
+
+          if (session?.user) {
+            try {
+              await checkAdminStatus(session.user.id);
+            } catch (error) {
+              console.error('Error checking admin status:', error);
+              setIsAdmin(false);
+            }
           }
+          setIsLoading(false);
         }
+      })
+      .catch((error) => {
+        clearTimeout(sessionTimeout);
+        console.error('❌ Failed to get session:', error);
         setIsLoading(false);
-      }
-    });
+      });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const checkAdminStatus = async (userId: string) => {
-    // @ts-ignore - Database types will regenerate after migration deploys
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .maybeSingle();
-    
-    setIsAdmin(!!data);
+    try {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}&role=eq.admin`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIsAdmin(data && data.length > 0);
+      } else {
+        setIsAdmin(false);
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      setIsAdmin(false);
+    }
   };
 
   const signOut = async () => {

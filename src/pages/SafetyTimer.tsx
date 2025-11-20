@@ -47,30 +47,54 @@ const SafetyTimer = () => {
       // Send Twilio SMS via edge function
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        const response = await supabase.functions.invoke('emergency-notifications', {
-          body: {
-            type: 'timer_expired',
-            user_id: session.user.id,
-            message: `Safety timer expired after ${minutes} minutes`
-          }
-        });
+        console.log('Sending timer expiry alert...');
+
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Request timeout')), 30000)
+        );
+
+        const response = await Promise.race([
+          supabase.functions.invoke('emergency-notifications', {
+            body: {
+              type: 'timer_expired',
+              user_id: session.user.id,
+              message: `Safety timer expired after ${minutes} minutes`
+            }
+          }),
+          timeoutPromise
+        ]);
+
+        console.log('Timer expiry response:', response);
 
         if (response.error) {
           throw new Error(response.error.message);
         }
 
         const notificationsSent = response.data?.notifications_sent ?? 0;
-        toast({
-          title: "⚠️ Emergency Alert Sent",
-          description: `SMS sent to ${notificationsSent} contact${notificationsSent !== 1 ? 's' : ''}`,
-          variant: "destructive",
-        });
+
+        if (notificationsSent === 0) {
+          toast({
+            title: "⚠️ Timer Expired",
+            description: response.data?.error || "No SMS sent. Please contact emergency contacts manually.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "⚠️ Emergency Alert Sent",
+            description: `SMS sent to ${notificationsSent} contact${notificationsSent !== 1 ? 's' : ''}`,
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
       console.error('Error sending timer expiry alert:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: "Error",
-        description: "Failed to send automatic alert. Please contact emergency contacts manually.",
+        description: errorMessage.includes('timeout')
+          ? "Alert timeout. Please contact emergency contacts manually."
+          : "Failed to send automatic alert. Please contact emergency contacts manually.",
         variant: "destructive",
       });
     }

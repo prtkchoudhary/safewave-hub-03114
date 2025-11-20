@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, MapPin, MessageSquare, Send, X } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase-temp";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ const SosButton = () => {
   const [emergencyContacts, setEmergencyContacts] = useState<any[]>([]);
   const [locationData, setLocationData] = useState<{latitude: number, longitude: number, locationUrl: string, message: string} | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -66,54 +68,77 @@ const SosButton = () => {
   };
 
   const proceedWithSOS = async () => {
+    console.log('🚨 1. proceedWithSOS started');
     setShowCountdown(false);
     setIsActivating(true);
 
     try {
+      console.log('🚨 2. Checking geolocation support');
       if ("geolocation" in navigator) {
+        console.log('🚨 3. Getting current position...');
         navigator.geolocation.getCurrentPosition(
           async (position) => {
+            console.log('🚨 4. Got position:', position.coords);
             // Check if component is still mounted
             if (!isMountedRef.current) return;
 
             const { latitude, longitude } = position.coords;
             const locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+            console.log('🚨 5. Location URL:', locationUrl);
 
-            // Fetch emergency contacts
-            // @ts-ignore - Database types will regenerate after migration deploys
-            const { data: contacts, error } = await supabase
-              .from('emergency_contacts')
-              .select('*')
-              .order('is_primary', { ascending: false });
+            // Fetch emergency contacts using REST API
+            try {
+              console.log('🚨 6. Checking user auth...');
+              if (!user) {
+                throw new Error('User not authenticated');
+              }
+              console.log('🚨 7. User authenticated:', user.id);
 
-            // Check if component is still mounted before updating state
-            if (!isMountedRef.current) return;
+              const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+              const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-            if (error) {
-              console.error('Error fetching contacts:', error);
-              toast({
-                title: "Error",
-                description: "Failed to fetch emergency contacts.",
-                variant: "destructive",
+              console.log('🚨 8. Fetching contacts via REST API...');
+              const response = await fetch(`${SUPABASE_URL}/rest/v1/emergency_contacts?user_id=eq.${user.id}&order=is_primary.desc`, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'apikey': SUPABASE_KEY,
+                  'Authorization': `Bearer ${SUPABASE_KEY}`
+                }
               });
-              setIsActivating(false);
-              return;
-            }
+
+              console.log('🚨 9. Fetch response status:', response.status);
+
+              // Check if component is still mounted before updating state
+              if (!isMountedRef.current) return;
+
+              if (!response.ok) {
+                throw new Error('Failed to fetch contacts');
+              }
+
+              const contacts = await response.json();
+              console.log('🚨 10. Contacts fetched:', contacts);
 
             if (contacts && contacts.length > 0) {
+              console.log('🚨 11. Creating emergency message...');
               // Create emergency message
               const message = `🚨 EMERGENCY SOS ALERT 🚨\n\nI need help! My current location:\n${locationUrl}\n\nCoordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}\n\nTime: ${new Date().toLocaleString()}`;
 
+              console.log('🚨 12. Setting state - contacts and location data');
               // Store data and show dialog with contacts
               setEmergencyContacts(contacts);
               setLocationData({ latitude, longitude, locationUrl, message });
+
+              console.log('🚨 13. Opening dialog...');
               setShowContactsDialog(true);
 
+              console.log('🚨 14. Showing toast...');
               toast({
                 title: "SOS Alert Ready!",
                 description: `Choose WhatsApp or SMS to send alerts.`,
               });
             } else {
+              console.log('🚨 15. No contacts found');
               toast({
                 title: "No Emergency Contacts",
                 description: "Please add emergency contacts first.",
@@ -121,7 +146,17 @@ const SosButton = () => {
               });
             }
 
+            console.log('🚨 16. Setting isActivating to false');
             setIsActivating(false);
+          } catch (error) {
+            console.error('Error fetching contacts:', error);
+            toast({
+              title: "Error",
+              description: "Failed to fetch emergency contacts.",
+              variant: "destructive",
+            });
+            setIsActivating(false);
+          }
           },
           (error) => {
             // Check if component is still mounted
@@ -168,51 +203,79 @@ const SosButton = () => {
 
   const sendTwilioSMS = async () => {
     if (!locationData) return;
-    
+
     setIsActivating(true);
+    console.log('sendTwilioSMS called');
+
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      if (!user) {
         toast({
           title: "Authentication Error",
           description: "Please log in to send SMS alerts.",
           variant: "destructive",
         });
+        setIsActivating(false);
         return;
       }
 
-      const response = await supabase.functions.invoke('emergency-notifications', {
-        body: {
-          type: 'sos',
-          user_id: session.user.id,
-          location: {
-            latitude: locationData.latitude,
-            longitude: locationData.longitude
-          },
-          message: "Emergency SOS Alert - I need immediate help!"
-        }
-      });
+      console.log('Invoking emergency-notifications function...');
+
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timeout - please check Twilio credentials')), 30000)
+      );
+
+      // Race between the function call and timeout
+      const response = await Promise.race([
+        supabase.functions.invoke('emergency-notifications', {
+          body: {
+            type: 'sos',
+            user_id: user.id,
+            location: {
+              latitude: locationData.latitude,
+              longitude: locationData.longitude
+            },
+            message: "Emergency SOS Alert - I need immediate help!"
+          }
+        }),
+        timeoutPromise
+      ]);
+
+      console.log('Response received:', response);
 
       if (response.error) {
-        throw new Error(response.error.message);
+        console.error('Function returned error:', response.error);
+        throw new Error(response.error.message || 'Failed to send SMS');
       }
 
       const notificationsSent = response.data?.notifications_sent ?? 0;
 
-      toast({
-        title: "✅ SOS Alerts Sent!",
-        description: `Emergency SMS sent to ${notificationsSent} contact${notificationsSent !== 1 ? 's' : ''}.`,
-      });
+      if (notificationsSent === 0) {
+        toast({
+          title: "⚠️ No SMS Sent",
+          description: response.data?.error || "No emergency contacts found or Twilio not configured.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "✅ SOS Alerts Sent!",
+          description: `Emergency SMS sent to ${notificationsSent} contact${notificationsSent !== 1 ? 's' : ''}.`,
+        });
+      }
 
       setShowContactsDialog(false);
     } catch (error) {
       console.error('Error sending Twilio SMS:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: "SMS Error",
-        description: "Failed to send SMS alerts. Please try manual methods.",
+        description: errorMessage.includes('timeout')
+          ? "Request timed out. Please check Twilio credentials in Supabase settings."
+          : "Failed to send SMS alerts. Please try manual methods or check logs.",
         variant: "destructive",
       });
     } finally {
+      console.log('Setting isActivating to false');
       setIsActivating(false);
     }
   };

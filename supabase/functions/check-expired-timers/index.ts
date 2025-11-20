@@ -84,23 +84,50 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Here you would normally send SMS alerts
-        // For now, we'll just log the action
-        // You can integrate with Twilio or another SMS service
-        console.log(`Would send SMS to ${contacts.length} contact(s) for user ${timer.user_id}`);
+        // Get user's last known location if available
+        const { data: locationData } = await supabase
+          .from('user_locations')
+          .select('latitude, longitude')
+          .eq('user_id', timer.user_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
 
-        // Create SOS activation record
-        const { error: sosError } = await supabase
-          .from('sos_activations')
-          .insert({
-            user_id: timer.user_id,
-            message: `Safety timer expired after ${timer.duration_minutes} minutes. No check-in received.`,
-            contacts_notified: contacts.map(c => c.phone),
-            status: 'active',
-          });
+        // Call emergency-notifications function to send SMS via Twilio
+        console.log(`Sending SMS alerts to ${contacts.length} contact(s) for user ${timer.user_id}`);
 
-        if (sosError) {
-          console.error(`Error creating SOS activation:`, sosError);
+        const notificationPayload = {
+          type: 'timer_expired',
+          user_id: timer.user_id,
+          message: `Safety timer expired after ${timer.duration_minutes} minutes. No check-in received.`,
+        };
+
+        // Add location if available
+        if (locationData?.latitude && locationData?.longitude) {
+          notificationPayload.location = {
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+          };
+        }
+
+        // Invoke the emergency-notifications function
+        const notificationResponse = await fetch(
+          `${supabaseUrl}/functions/v1/emergency-notifications`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseServiceRoleKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(notificationPayload),
+          }
+        );
+
+        if (!notificationResponse.ok) {
+          console.error(`Failed to send notifications for user ${timer.user_id}`);
+        } else {
+          const notificationResult = await notificationResponse.json();
+          console.log(`Notifications sent: ${notificationResult.notifications_sent} of ${notificationResult.total_contacts}`);
         }
 
         results.push({

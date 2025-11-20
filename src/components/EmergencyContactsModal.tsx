@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase-temp";
+import { useAuth } from "@/contexts/AuthContext";
 import { z } from 'zod';
 
 type EmergencyContactsModalProps = {
@@ -34,12 +35,13 @@ const contactSchema = z.object({
 
 const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps) => {
   console.log('🎨 EmergencyContactsModal rendered, isOpen:', isOpen);
-  
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState({ name: "", phone: "", relationship: "" });
   const { toast } = useToast();
+  const { user } = useAuth();
 
   console.log('📊 State:', { 
     isAdding, 
@@ -56,20 +58,39 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
   }, [isOpen]);
 
   const fetchContacts = async () => {
-      // @ts-ignore - Database types will regenerate after migration deploys
-      const { data, error } = await supabase
-        .from('emergency_contacts')
-        .select('*')
-        .order('is_primary', { ascending: false });
+    try {
+      if (!user) {
+        console.log('⚠️ No user found, skipping fetch');
+        return;
+      }
 
-    if (error) {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      // Filter by user_id to only get current user's contacts
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/emergency_contacts?user_id=eq.${user.id}&order=is_primary.desc`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch contacts');
+      }
+
+      const data = await response.json();
+      console.log('📥 Fetched contacts for user:', user.id, data);
+      setContacts(data || []);
+    } catch (error) {
+      console.error('❌ Fetch error:', error);
       toast({
         title: "Error",
         description: "Failed to load contacts",
         variant: "destructive",
       });
-    } else {
-      setContacts(data || []);
     }
   };
 
@@ -97,19 +118,47 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
       
       console.log('📦 Contact data:', contactData);
       console.log('🔄 Inserting into database...');
+      console.log('👤 Current user from context:', user?.id);
 
-      // @ts-ignore - Database types will regenerate after migration deploys
-      const { data, error } = await supabase
-        .from('emergency_contacts')
-        .insert([contactData])
-        .select();
-
-      console.log('📨 Insert response:', { data, error });
-
-      if (error) {
-        console.error('❌ Database error:', error);
-        throw error;
+      if (!user) {
+        throw new Error('You must be logged in to add emergency contacts');
       }
+
+      // Add user_id to contact data
+      const contactDataWithUser = {
+        ...contactData,
+        user_id: user.id
+      };
+
+      console.log('📦 Contact data with user_id:', contactDataWithUser);
+      console.log('🚀 Using direct REST API call...');
+
+      // Use direct REST API instead of Supabase client
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/emergency_contacts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(contactDataWithUser)
+      });
+
+      console.log('✨ REST API call completed!');
+      console.log('📨 Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ API error:', errorData);
+        throw new Error(errorData.message || 'Failed to add contact');
+      }
+
+      const data = await response.json();
+      console.log('📨 Response data:', data);
 
       console.log('✅ Contact added successfully!');
 
@@ -157,17 +206,27 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
     try {
       contactSchema.parse(newContact);
 
-      // @ts-ignore - Database types will regenerate after migration deploys
-      const { error } = await supabase
-        .from('emergency_contacts')
-        .update({
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/emergency_contacts?id=eq.${editingId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({
           name: newContact.name,
           phone: newContact.phone,
           relationship: newContact.relationship || null,
         })
-        .eq('id', editingId);
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Failed to update contact');
+      }
 
       toast({
         title: "Contact Updated",
@@ -196,24 +255,33 @@ const EmergencyContactsModal = ({ isOpen, onClose }: EmergencyContactsModalProps
   };
 
   const handleDelete = async (id: string) => {
-    // @ts-ignore - Database types will regenerate after migration deploys
-    const { error } = await supabase
-      .from('emergency_contacts')
-      .delete()
-      .eq('id', id);
+    try {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete contact",
-        variant: "destructive",
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/emergency_contacts?id=eq.${id}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
       });
-    } else {
+
+      if (!response.ok) {
+        throw new Error('Failed to delete contact');
+      }
+
       toast({
         title: "Contact Deleted",
         description: "Emergency contact has been removed.",
       });
       fetchContacts();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete contact",
+        variant: "destructive",
+      });
     }
   };
 
