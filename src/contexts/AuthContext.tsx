@@ -59,22 +59,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Set up auth state listener (after initial session check)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Only update if we're initialized (prevents race condition on reload)
-        if (isInitialized) {
-          setSession(session);
-          setUser(session?.user ?? null);
+        console.log('Auth state change:', event, 'initialized:', isInitialized);
 
-          // Check admin status after state update
-          if (session?.user) {
-            try {
-              await checkAdminStatus(session.user.id);
-            } catch (error) {
-              console.error('Error checking admin status:', error);
-              setIsAdmin(false);
-            }
-          } else {
+        // Skip INITIAL_SESSION event to prevent race condition
+        // But process all other events (SIGNED_IN, SIGNED_OUT, etc.)
+        if (event === 'INITIAL_SESSION' && !isInitialized) {
+          // Skip - wait for getSession() to complete
+          return;
+        }
+
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        // Check admin status after state update
+        if (session?.user) {
+          try {
+            await checkAdminStatus(session.user.id);
+          } catch (error) {
+            console.error('Error checking admin status:', error);
             setIsAdmin(false);
           }
+        } else {
+          setIsAdmin(false);
         }
       }
     );
