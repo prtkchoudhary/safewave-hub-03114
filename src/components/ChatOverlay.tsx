@@ -447,8 +447,8 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
-    // Save user message to database
-    await saveMessage(userMsg);
+    // Save user message to database (non-blocking)
+    saveMessage(userMsg).catch(err => console.error('Failed to save user message:', err));
 
     try {
       // Use cached location or fetch fresh
@@ -475,6 +475,12 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
       // Note: For safety emergencies, we use direct anonymous access (no auth check to avoid hanging)
       const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
       const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      console.log('ChatOverlay: Preparing to call edge function', {
+        url: SUPABASE_URL,
+        hasAnonKey: !!SUPABASE_ANON_KEY,
+        messageLength: userMessage.length
+      });
       
       const fetchResponse = await fetch(`${SUPABASE_URL}/functions/v1/gemini-safety-chat`, {
         method: 'POST',
@@ -498,13 +504,23 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
           } : undefined
         })
       });
-      
+
+      console.log('ChatOverlay: Fetch response received', {
+        status: fetchResponse.status,
+        ok: fetchResponse.ok
+      });
+
       if (!fetchResponse.ok) {
         const errorText = await fetchResponse.text();
+        console.error('ChatOverlay: Edge function error', { status: fetchResponse.status, error: errorText });
         throw new Error(`Failed to get AI response: ${fetchResponse.status} ${errorText}`);
       }
-      
+
       const responseData = await fetchResponse.json();
+      console.log('ChatOverlay: AI response received', {
+        hasResponse: !!responseData.response,
+        suggestedActionsCount: responseData.suggested_actions?.length || 0
+      });
 
       const aiMsg: Message = {
         role: "assistant",
@@ -514,9 +530,9 @@ const ChatOverlay = ({ isOpen, onClose }: ChatOverlayProps) => {
       };
 
       setMessages((prev) => [...prev, aiMsg]);
-      
-      // Save AI response to database
-      await saveMessage(aiMsg);
+
+      // Save AI response to database (non-blocking)
+      saveMessage(aiMsg).catch(err => console.error('Failed to save AI message:', err));
 
     } catch (error) {
       console.error('Chat error:', error);
